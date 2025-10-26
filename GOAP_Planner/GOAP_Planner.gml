@@ -77,8 +77,8 @@ function GOAP_Planner() constructor {
                     _actions[j + 1] = a;
                     swapped = true;
                 }
-                if !swapped { break; }
             }
+            if !swapped { break; }
         }
 
         var _sig = sign_effects(_required) + "|" + string(_parent.action == undefined ? -1 : _parent.action.component_id);
