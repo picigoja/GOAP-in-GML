@@ -1,8 +1,8 @@
-function GoapPlanner() constructor {
+function GOAP_Planner() constructor {
 
-    /// @param {Struct.GoapAgent} _agent
-    /// @param {Array<Struct.AgentGoal>} _goals
-    /// @param {Struct.AgentGoal|Undefined} _most_recent_goal
+    /// @param {Struct.GOAP_Agent} _agent
+    /// @param {Array<Struct.GOAP_Goal>} _goals
+    /// @param {Struct.GOAP_Goal|Undefined} _most_recent_goal
     plan = function(_agent, _goals, _most_recent_goal) {
         var _achievable = array_filter(_goals, function(_g) { return _g.is_relevant(); });
 
