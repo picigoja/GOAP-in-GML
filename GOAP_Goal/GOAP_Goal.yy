@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"GOAP_Goal",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"GOAP_Goal",
+  "parent":{
+    "name":"GOAP",
+    "path":"folders/GOAP.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

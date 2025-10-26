@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"GOAP_ActionPlan",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"GOAP_ActionPlan",
+  "parent":{
+    "name":"Action",
+    "path":"folders/GOAP/Action.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

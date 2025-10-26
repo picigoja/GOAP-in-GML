@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"GOAP_Planner",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"GOAP_Planner",
+  "parent":{
+    "name":"Agent",
+    "path":"folders/GOAP/Agent.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}
