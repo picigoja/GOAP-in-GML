@@ -3,10 +3,10 @@ Goal Oriented Action Planning system in GameMaker
 git-amend's GOAP System originaly wirtten in C# for Unity reworked for GML by picigoja
 git-amend's implementation: [Better AI in Unity - GOAP (Goal Oriented Action Planning)](https:youtu.be/T_sBYgP7_2k?si=J_V58RjAPR-CwhQ-)
 
-###What is it:
+### What is it:
 A Goal Oriented Action Planning system for creating more complex NPC behaviours than what State Machines or Behaviour Trees could manage
 
-###How it works:
+### How it works:
 Define Beliefs, Actions and Goals to the Agent. The Agent will take all of its Goals and sort out the ones that have any Beliefs among its Desired Effects thats Condition evaluates.
 
 e.g.: Let's make a Goal "Do not die of hunger" and a Belief as its Desired Effect "Am I hungry?" for the Agent "Agent NPC Worker". 
@@ -26,9 +26,9 @@ would link Action_1 and Action_2 after each other as a solution to Goal_1.
 
 After discovering every possible combination, the Agent chooses the cheapest stack and starts executing the last Action going backwards.
 
-##Basic Components:
+## Basic Components:
 
-###Beliefs:
+### Beliefs:
 Beliefs are information about the World State. Create one by calling "new AgentBelief()". 
 
 e.g.: 
@@ -56,7 +56,7 @@ TODO Give example for Loacation
 
 Other Components will refere to Your Beliefs according to the connections between them, defined later in Actions and Goals.
 
-###Actions:
+### Actions:
 Actions are the way the Agent will change the World State. Create one by calling "new AgentAction()".
 
 e.g.:
@@ -120,7 +120,7 @@ var _action_1 = new AgentAction( ... );
 
 array_push(_actions, _action, _action_1, ... );
 
-###Goals:
+### Goals:
 Goals are a collection of Beliefs thats Conditions are desired to evaluate to TRUE. Create one by calling "new AgentGoal()".
 
 e.g.: 
@@ -154,7 +154,7 @@ array_push(_goals, _goal, _goal_1, ... );
 
 TODO Sensors
 
-###Agent:
+### Agent:
 The Agent is the main component that hold Beliefs, Actions and Goals. Create one and give it a name by calling "new GoapAgent(_name)".
 and give the Agent initial Beliefs, Actions and Goals described above.
 
