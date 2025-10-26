@@ -1,14 +1,13 @@
 /// Main component GOAP Agent.
 /// @param {String} _name
-/// @param {Array<Struct.AgentBelief>} _beliefs
-/// @param {Array<Struct.AgentAction>} _actions
-/// @param {Array<Struct.AgentGoal>} _goals
+/// @param {Array<Struct.GOAP_Belief>} _beliefs
+/// @param {Array<Struct.GOAP_Action>} _actions
+/// @param {Array<Struct.GOAP_Goal>} _goals
 function GOAP_Agent(_name, _beliefs = [], _actions = [], _goals = []) constructor {
     name = _name;
-
-    beliefs = _beliefs;             // assume already constructed beliefs
-    actions = _actions;             // constructed actions (with initial_* filled)
-    goals   = _goals;               // constructed goals (with initial_* filled)
+    beliefs = _beliefs;
+    actions = _actions;
+    goals   = _goals;
 
     current_action = undefined;
     action_plan    = undefined;
@@ -16,7 +15,7 @@ function GOAP_Agent(_name, _beliefs = [], _actions = [], _goals = []) constructo
     current_goal = undefined;
     last_goal    = undefined;
 
-    planner = new GoapPlanner();
+    planner = new GOAP_Planner();
 
     show_debug_message(string("GOAP Agent Created. Agent {0}, active", self.name));
 
