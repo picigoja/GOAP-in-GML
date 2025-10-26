@@ -1,6 +1,6 @@
 /// @param {String} _name
-/// @param {Array<String>} _preconditions
-/// @param {Array<String>} _effects
+/// @param {Array<GOAP_Belief>} _preconditions
+/// @param {Array<GOAP_Belief>} _effects
 /// @param {Real} _cost
 function GOAP_Action(_name, _preconditions = [], _effects = [], _cost = 1) : _GOAP_Component(_name) constructor {
     preconditions = _preconditions;
