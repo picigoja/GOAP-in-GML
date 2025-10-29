@@ -1,12 +1,12 @@
 {
   "$GMScript":"v1",
-  "%Name":"GOAP_ActionPlan",
+  "%Name":"GOAP_Sensor",
   "isCompatibility":false,
   "isDnD":false,
-  "name":"GOAP_ActionPlan",
+  "name":"GOAP_Sensor",
   "parent":{
-    "name":"Action",
-    "path":"folders/GOAP/Action.yy",
+    "name":"GOAP",
+    "path":"GOAP.yyp",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

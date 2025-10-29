@@ -1,12 +1,12 @@
 {
   "$GMScript":"v1",
-  "%Name":"GOAP_Sensor",
+  "%Name":"GOAP_Planner",
   "isCompatibility":false,
   "isDnD":false,
-  "name":"GOAP_Sensor",
+  "name":"GOAP_Planner",
   "parent":{
     "name":"GOAP",
-    "path":"folders/GOAP.yy",
+    "path":"GOAP.yyp",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

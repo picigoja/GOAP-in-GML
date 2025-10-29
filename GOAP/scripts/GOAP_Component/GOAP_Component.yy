@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"GOAP_Component",
   "parent":{
-    "name":"Agent",
-    "path":"folders/GOAP/Agent.yy",
+    "name":"GOAP",
+    "path":"GOAP.yyp",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

@@ -1,12 +1,12 @@
 {
   "$GMScript":"v1",
-  "%Name":"GOAP_Agent",
+  "%Name":"GOAP_Action",
   "isCompatibility":false,
   "isDnD":false,
-  "name":"GOAP_Agent",
+  "name":"GOAP_Action",
   "parent":{
-    "name":"Agent",
-    "path":"folders/GOAP/Agent.yy",
+    "name":"GOAP",
+    "path":"GOAP.yyp",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",
