@@ -26,6 +26,7 @@
     {"id":{"name":"GOAP_Belief","path":"scripts/GOAP_Belief/GOAP_Belief.yy",},},
     {"id":{"name":"GOAP_Component","path":"scripts/GOAP_Component/GOAP_Component.yy",},},
     {"id":{"name":"GOAP_Goal","path":"scripts/GOAP_Goal/GOAP_Goal.yy",},},
+    {"id":{"name":"GOAP_Memory","path":"scripts/GOAP_Memory/GOAP_Memory.yy",},},
     {"id":{"name":"GOAP_Node","path":"scripts/GOAP_Node/GOAP_Node.yy",},},
     {"id":{"name":"GOAP_Planner","path":"scripts/GOAP_Planner/GOAP_Planner.yy",},},
     {"id":{"name":"GOAP_Sensor","path":"scripts/GOAP_Sensor/GOAP_Sensor.yy",},},
