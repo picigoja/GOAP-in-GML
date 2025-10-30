@@ -47,7 +47,7 @@ function GOAP_Agent(_name, _beliefs = [], _actions = [], _goals = []) constructo
         }
     };
 
-    on_memory_update = function(_listener_key, _memory_key, _value, _dirty, _timestamp) {
+    on_memory_update = function(_listener, _memory_key, _value, _dirty, _timestamp) {
         // Optional agent-level hook for debugging or analytics
     };
 

@@ -75,6 +75,11 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
     evaluator     = _options.evaluator;
     cached_value  = _options.initial_value;
     memory_source = undefined;
+    auto_clean      = true;
+    debounce_ticks  = 0;
+    _last_eval_tick = -999;
+    post_evaluate   = undefined;
+    truth_map       = undefined;
 
     if (!is_undefined(_options.memory_key)) {
         if (is_string(_options.memory_key)) {
@@ -115,6 +120,7 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
 
     if (!_is_callable(evaluator)) {
         evaluator = function(_value, _source, _belief) {
+            if (_is_callable(truth_map)) return bool(truth_map(_value));
             return bool(_value);
         };
     }
@@ -153,6 +159,9 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
         memory_source = undefined;
     };
 
+    set_auto_clean = function(_flag) { auto_clean = bool(_flag); };
+    set_debounce   = function(_ticks) { debounce_ticks = max(0, floor(_ticks)); };
+
     /// @param {Struct.GOAP_Memory|Struct} _memory_snapshot
     /// @returns {Bool}
     evaluate = function(_memory_snapshot = undefined) {
@@ -161,19 +170,31 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
             _source = memory_source;
         }
 
+        if (debounce_ticks > 0 && is_instanceof(_source, GOAP_Memory) && !is_undefined(memory_key)) {
+            var _mem_tick = _source.last_updated(memory_key);
+            if (_mem_tick >= 0 && (_mem_tick - _last_eval_tick) < debounce_ticks) {
+                // fall through for now (no cached short-circuit)
+            }
+        }
+
         var _value = read_value_from(_source, cached_value);
         cached_value = _value;
 
         var _result = evaluator(_value, _source, self);
 
         if (!is_undefined(_source) && is_instanceof(_source, GOAP_Memory) && !is_undefined(memory_key)) {
-            _source.mark_clean(memory_key);
+            if (auto_clean) _source.mark_clean(memory_key);
+            _last_eval_tick = _source.last_updated(memory_key);
+        }
+
+        if (_is_callable(post_evaluate)) {
+            post_evaluate(_result, _value, _source, self);
         }
 
         return bool(_result);
     };
 
-    on_memory_update = function(_listener_key, _memory_key, _value, _dirty, _timestamp) {
+    on_memory_update = function(_listener, _memory_key, _value, _dirty, _timestamp) {
         if (!is_undefined(memory_key) && _memory_key == memory_key) {
             cached_value = _value;
         }
