@@ -8,6 +8,48 @@ function GOAP_Agent(_name, _beliefs = [], _actions = [], _goals = []) constructo
     beliefs = _beliefs;
     actions = _actions;
     goals   = _goals;
+    
+    memory       = new GOAP_Memory();
+    sensors      = [];
+    memory_clock = 0; // optional external tick source
+
+    register_sensor = function(_sensor) {
+        if (array_get_index(sensors, _sensor) >= 0) return;
+        _sensor.attach(memory);
+        array_push(sensors, _sensor);
+    };
+
+    tick_perception = function(_dt) {
+        memory.tick();
+        memory_clock += _dt;
+
+        for (var _i = 0; _i < array_length(sensors); ++_i) {
+            var _sensor = sensors[_i];
+            if (!is_undefined(_sensor.poll)) {
+                _sensor.poll(_dt, memory_clock);
+            }
+        }
+    };
+
+    get_memory = function() { return memory; };
+
+    get_snapshot = function() {
+        memory.tick();
+        return memory.snapshot(); // planner receives read-only struct copy
+    };
+
+    acknowledge_effects = function(_effects_struct) {
+        var _keys = variable_struct_get_names(_effects_struct);
+        for (var _i = 0; _i < array_length(_keys); ++_i) {
+            var _key = _keys[_i];
+            memory.write(_key, variable_struct_get(_effects_struct, _key));
+            memory.mark_clean(_key);
+        }
+    };
+
+    on_memory_update = function(_listener_key, _memory_key, _value, _dirty, _timestamp) {
+        // Optional agent-level hook for debugging or analytics
+    };
 
     current_action = undefined;
     action_plan    = undefined;
