@@ -1,14 +1,26 @@
+/// GOAP_Belief Contract
+/// - config: { memory_key, selector(context, default_value)->any, evaluator(value, source, belief)->bool, initial_value, on_change?(belief, previous_value, next_value, context)->Void }
+/// - evaluate(context): runs selector with debounce; emits on_change when value transitions
+/// - guarantees: selector called before evaluator, on_change fires after cached_value updates, auto_clean resets memory dirty flag
+/// - listeners: on_memory_update(listener, key, value, dirty, timestamp) -> Void
+///
 /// @param {String} _name
 /// @param {Struct|String|Real|Function|Undefined} _memory_config
 /// @param {Function|Undefined} _maybe_evaluator
 /// @param {Struct.Vector2} _location
 function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undefined, _location = new Vector2()) :
     _GOAP_Component(_name) constructor {
-    var _is_callable = function(_value) {
+    static DEBUG_ENABLED = function() {
+        if (variable_global_exists("GOAP_DEBUG")) return bool(global.GOAP_DEBUG);
+        if (variable_global_exists("debug_mode")) return bool(global.debug_mode);
+        return false;
+    };
+
+    static is_callable_value = function(_value) {
         return is_function(_value) || is_method(_value);
     };
 
-    var _normalize_config = function(_config, _fallback_evaluator) {
+    static normalize_config = function(_config, _fallback_evaluator) {
         var _result = {
             memory_key    : undefined,
             selector      : undefined,
@@ -38,36 +50,64 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
             return _result;
         }
 
-        if (_is_callable(_config) && _is_callable(_fallback_evaluator)) {
-            _result.selector  = _config;
-            _result.evaluator = _fallback_evaluator;
-            return _result;
-        }
-
-        if (_is_callable(_config)) {
-            var _condition = _config;
-            _result.evaluator = function(_value, _source, _belief) {
-                return bool(_condition());
-            };
+        if (is_callable_value(_config)) {
+            if (is_callable_value(_fallback_evaluator)) {
+                _result.selector  = _config;
+                _result.evaluator = _fallback_evaluator;
+            } else {
+                var _condition = _config;
+                _result.evaluator = function(_value, _source, _belief) {
+                    return bool(_condition());
+                };
+            }
             return _result;
         }
 
         if (is_string(_config) || is_real(_config)) {
             _result.memory_key = _config;
-            if (_is_callable(_fallback_evaluator)) {
+            if (is_callable_value(_fallback_evaluator)) {
                 _result.evaluator = _fallback_evaluator;
             }
             return _result;
         }
 
         _result.memory_key = _config;
-        if (_is_callable(_fallback_evaluator)) {
+        if (is_callable_value(_fallback_evaluator)) {
             _result.evaluator = _fallback_evaluator;
         }
         return _result;
     };
 
-    var _options = _normalize_config(_memory_config, _maybe_evaluator);
+    static selector_from_memory_key = function(_key) {
+        if (is_string(_key)) {
+            return function(_source, _default_value) {
+                if (is_instanceof(_source, GOAP_Memory)) {
+                    return _source.read(_key, _default_value);
+                }
+
+                if (is_struct(_source) && variable_struct_exists(_source, _key)) {
+                    var _bit = variable_struct_get(_source, _key);
+                    if (is_struct(_bit) && variable_struct_exists(_bit, "value")) {
+                        return _bit.value;
+                    }
+                    return _bit;
+                }
+
+                return _default_value;
+            };
+        }
+
+        var _key_string = string(_key);
+        return selector_from_memory_key(_key_string);
+    };
+
+    static debug_guard = function(_condition, _message) {
+        if (DEBUG_ENABLED() && !_condition) {
+            show_debug_message("[GOAP][Belief] " + string(_message));
+        }
+    };
+
+    var _options = normalize_config(_memory_config, _maybe_evaluator);
 
     location      = _location;
     memory_key    = undefined;
@@ -89,28 +129,9 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
         }
     }
 
-    if (!_is_callable(selector)) {
+    if (!is_callable_value(selector)) {
         if (!is_undefined(memory_key)) {
-            var _key_copy = memory_key;
-            selector = function(_source, _default_value) {
-                if (is_undefined(_source)) {
-                    return _default_value;
-                }
-
-                if (is_instanceof(_source, GOAP_Memory)) {
-                    return _source.read(_key_copy, _default_value);
-                }
-
-                if (is_struct(_source) && variable_struct_exists(_source, _key_copy)) {
-                    var _bit = variable_struct_get(_source, _key_copy);
-                    if (is_struct(_bit) && variable_struct_exists(_bit, "value")) {
-                        return _bit.value;
-                    }
-                    return _bit;
-                }
-
-                return _default_value;
-            };
+            selector = selector_from_memory_key(memory_key);
         } else {
             selector = function(_source, _default_value) {
                 return _default_value;
@@ -118,9 +139,9 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
         }
     }
 
-    if (!_is_callable(evaluator)) {
+    if (!is_callable_value(evaluator)) {
         evaluator = function(_value, _source, _belief) {
-            if (_is_callable(truth_map)) return bool(truth_map(_value));
+            if (is_callable_value(truth_map)) return bool(truth_map(_value));
             return bool(_value);
         };
     }
@@ -178,16 +199,21 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
         }
 
         var _value = read_value_from(_source, cached_value);
+        if (!is_undefined(memory_key) && is_instanceof(_source, GOAP_Memory)) {
+            var _bit = _source.get_bit(memory_key);
+            debug_guard(!is_undefined(_bit), "Selector for belief '" + string(name) + "' could not resolve memory key '" + string(memory_key) + "'");
+        }
         cached_value = _value;
 
         var _result = evaluator(_value, _source, self);
+        debug_guard(is_bool(_result) || is_real(_result), "Evaluator for belief '" + string(name) + "' returned non-boolean convertible value");
 
         if (!is_undefined(_source) && is_instanceof(_source, GOAP_Memory) && !is_undefined(memory_key)) {
             if (auto_clean) _source.mark_clean(memory_key);
             _last_eval_tick = _source.last_updated(memory_key);
         }
 
-        if (_is_callable(post_evaluate)) {
+        if (is_callable_value(post_evaluate)) {
             post_evaluate(_result, _value, _source, self);
         }
 
@@ -196,7 +222,7 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
 
     on_memory_update = function(_listener, _memory_key, _value, _dirty, _timestamp) {
         if (!is_undefined(memory_key) && _memory_key == memory_key) {
-            cached_value = _value;
+        cached_value = _value;
         }
     };
 
@@ -210,5 +236,26 @@ function GOAP_Belief(_name, _memory_config = undefined, _maybe_evaluator = undef
 
     get_cached_value = function() {
         return cached_value;
+    };
+
+    to_struct = function() {
+        return {
+            name        : name,
+            memory_key  : memory_key,
+            cached_value: cached_value,
+            debounce    : debounce_ticks,
+            auto_clean  : auto_clean,
+            last_eval   : _last_eval_tick,
+            has_selector: is_function(selector) || is_method(selector),
+        };
+    };
+
+    to_string = function() {
+        var _info = "[Belief name=" + string(name) + " key=" + string(memory_key) + "]";
+        return _info;
+    };
+
+    debug_json = function() {
+        return json_stringify(to_struct(), false);
     };
 }
