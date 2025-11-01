@@ -1,11 +1,14 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-01T16:32:02Z"
+  updated_at: "2025-11-01T16:41:56Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
       when: "2025-11-01T16:30:51Z"
+    - who: "Codex"
+      what: "merge-patch T02,T03,T04,T05,T09,T10,T12; normalize anchors; provenance update"
+      when: "2025-11-01T16:41:56Z"
   helper_version: 1
   conventions:
     - "GML naming: variables snake_case, locals prefixed with _snake_case, constructors/functions PascalCase."
@@ -33,10 +36,10 @@ workflow:
   unattended_task_policy:
     selection_order: ["priority", "dependencies_cleared", "id"]
     allowed_status_transitions:
-      - { from: "queued", to: "in_progress" }
-      - { from: "in_progress", to: "done" }
-      - { from: "queued", to: "blocked" }
-      - { from: "blocked", to: "queued" }
+      - {from: "queued", to: "in_progress"}
+      - {from: "in_progress", to: "done"}
+      - {from: "queued", to: "blocked"}
+      - {from: "blocked", to: "queued"}
     execution_loop:
       - "Select first queued task with all dependencies done."
       - "Set status=in_progress immediately; write meta.updated_at."
@@ -76,7 +79,7 @@ tasks:
       - "Clean build with zero warnings."
     status: queued
     priority: 1
-    labels: ["packaging","project"]
+    labels: ["packaging", "project"]
     anchors:
       - "GOAP/GOAP.yyp"
       - "GOAP/GOAP.resource_order"
@@ -92,11 +95,11 @@ tasks:
     status: queued
     priority: 1
     dependencies: ["T01"]
-    labels: ["api","docs","safety"]
+    labels: ["api", "docs", "safety"]
     anchors:
       - "GOAP/scripts/Animus_Core/Animus_Core.gml"
-      - "README.md"
       - "GOAP/scripts/Animus_StrategyTemplates/Animus_StrategyTemplates.gml"
+      - "README.md"
   - id: T03
     title: "Finalize Strategy templates (R1)"
     description: >
@@ -107,7 +110,7 @@ tasks:
     status: queued
     priority: 1
     dependencies: ["T02"]
-    labels: ["executor","strategies"]
+    labels: ["executor", "strategies"]
     anchors:
       - "GOAP/scripts/Animus_StrategyTemplates/Animus_StrategyTemplates.gml"
       - "GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml"
@@ -115,13 +118,13 @@ tasks:
     title: "Error surfaces (R2)"
     description: >
       Replace silent/undefined returns with explicit outcomes or DEBUG asserts.
-      Missing strategy methods emit actionable errors including action name.
+      Missing strategy methods emit actionable errors including the action name.
     acceptance:
       - "Malformed strategies produce clear DEBUG errors; no silent failures."
     status: queued
     priority: 1
     dependencies: ["T03"]
-    labels: ["safety","devx"]
+    labels: ["safety", "devx"]
     anchors:
       - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
       - "GOAP/scripts/Animus_Core/Animus_Core.gml"
@@ -136,7 +139,7 @@ tasks:
     status: queued
     priority: 2
     dependencies: ["T03"]
-    labels: ["planner","executor","performance"]
+    labels: ["planner", "executor", "performance"]
     anchors:
       - "GOAP/scripts/Animus_Planner/Animus_Planner.gml"
       - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
@@ -150,7 +153,7 @@ tasks:
     status: queued
     priority: 2
     dependencies: ["T05"]
-    labels: ["planner","executor"]
+    labels: ["planner", "executor"]
     anchors:
       - "Animus_Planner.gml"
       - "Animus_Executor.gml"
@@ -163,7 +166,7 @@ tasks:
       - "Three deterministic replay tests pass with identical traces."
     status: queued
     priority: 2
-    labels: ["executor","persistence","testing"]
+    labels: ["executor", "persistence", "testing"]
     anchors:
       - "Animus_Executor.gml"
   - id: T08
@@ -176,7 +179,7 @@ tasks:
       - "Snapshot/restore of nested state matches JSON equality."
     status: queued
     priority: 3
-    labels: ["memory","belief","testing"]
+    labels: ["memory", "belief", "testing"]
     anchors:
       - "Animus_Belief.gml"
       - "Animus_Memory.gml"
@@ -189,21 +192,21 @@ tasks:
       - "Single call prints readable plan+playback without API mismatch."
     status: queued
     priority: 3
-    labels: ["debug","tooling"]
+    labels: ["debug", "tooling"]
     anchors:
       - "GOAP/scripts/Animus_Debug/Animus_Debug.gml"
       - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
   - id: T10
     title: "Samples & docs"
     description: >
-      Provide Minimal (hunger -> get food -> eat) and Move-style navigation samples using templates.
-      Update README Quickstart and add Migration Guide (GOAP_* -> Animus_*).
+      Provide Minimal (hunger → get food → eat) and Move-style navigation samples using templates.
+      Update README Quickstart and add Migration Guide (GOAP_* → Animus_*).
     acceptance:
       - "Paste-into-room samples run."
       - "Migration guide closes alias/contract gap."
     status: queued
     priority: 3
-    labels: ["docs","samples"]
+    labels: ["docs", "samples"]
     anchors:
       - "README.md"
       - "samples/minimal/*"
@@ -218,7 +221,7 @@ tasks:
       - "Traces are identical across runs."
     status: queued
     priority: 4
-    labels: ["performance","determinism","testing"]
+    labels: ["performance", "determinism", "testing"]
     anchors:
       - "bench/*.gml"
   - id: T12
@@ -229,7 +232,7 @@ tasks:
       - "v0.9.0 installs cleanly; only minor issues remain."
     status: queued
     priority: 4
-    dependencies: ["T01","T02","T03","T04","T05","T06","T07","T08","T09","T10","T11"]
+    dependencies: ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11"]
     labels: ["release"]
     anchors:
       - "CHANGELOG.md"
