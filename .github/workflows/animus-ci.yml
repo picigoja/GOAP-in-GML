@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
 permissions:
   contents: read
+  issues: write
 jobs:
   sanity:
     runs-on: ubuntu-latest
