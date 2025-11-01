@@ -17,6 +17,8 @@ jobs:
           python-version: '3.11'
       - name: Install deps
         run: pip install pyyaml
+      - name: Validate linter config
+        run: python tools/gml_linter.py --validate-only
       - name: Lint GML (Animus rules)
         run: |
           python tools/gml_linter.py

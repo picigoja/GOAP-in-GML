@@ -43,6 +43,18 @@ ban_globals: '\\bglobal\\.\\w+'
 planner_call_regex: 'planner\\s*\\.\\s*plan\\s*\\('  # we’ll analyze arg count
 required_arg_count: 4                           # agent, goals_to_check, last_goal, memory
 
+# More robust planner regex: capture top-level args inside the parentheses
+planner_call_regex: |
+  \bplanner\.plan\s*\(
+    (?P<args>[^)]*)
+  \)
+
+# Detect older 3-arg signature (agent, goals, last_goal)
+planner_old_sig_regex: |
+  \bplanner\.plan\s*\(
+    \s*[^,]+,\s*[^,]+,\s*[^,)]+\s*
+  \)
+
 # Strategy interface (methods required on returned struct)
 strategy_required_methods:
   - 'start'
