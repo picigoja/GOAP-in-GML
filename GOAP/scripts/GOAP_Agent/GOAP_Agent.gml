@@ -6,16 +6,22 @@ function GOAP_Agent() constructor {
   planner = undefined;           // GOAP_Planner
   memory = undefined;            // GOAP_Memory
   executor = undefined;          // GOAP_Executor (optional; not used here)
+  world = undefined;             // external world reference
+  blackboard = undefined;        // shared blackboard
+  reservation_bus = undefined;   // shared reservation coordination map
 
   // Agent knowledge
   beliefs = [];                  // array or map of GOAP_Belief
   goals = [];                    // array of GOAP_Goal
+  goals_to_check = [];           // alias for planner signature compatibility
   actions = [];                  // optional: catalog for UI/debug only
 
   // Planning state (read-only for others)
   last_goal = undefined;
   last_plan = undefined;         // planner result object
   last_plan_tick = 0;
+  _active_plan = undefined;
+  _last_snapshot = undefined;
 
   // Orchestration config
   config = {
@@ -28,15 +34,18 @@ function GOAP_Agent() constructor {
   _next_planning_tick = 0;
 
   // ----- Binding -----
-  bind = function(_planner, _memory, _executor_optional) {
+  bind = function(_planner, _memory, _executor_optional, _world_optional, _blackboard_optional) {
     planner = _planner;
     memory = _memory;
     executor = _executor_optional; // may be undefined; executor not used here
+    if (argument_count > 3) { world = _world_optional; }
+    if (argument_count > 4) { blackboard = _blackboard_optional; }
     return self;
   };
 
   set_goals = function(_goals_array) {
     goals = _goals_array;
+    goals_to_check = _goals_array;
     return self;
   };
 
@@ -80,18 +89,9 @@ function GOAP_Agent() constructor {
 
   // ----- Planning (no execution) -----
   tick_planning = function() {
-    if (is_undefined(planner) || is_undefined(memory)) { return; }
-    if (!is_array(goals)) { return; }
-
-    // Planner call uses the new signature
-    var _plan = planner.plan(self, goals, memory, last_goal);
-
-    if (!is_undefined(_plan)) {
-      last_plan = _plan;
-      last_goal = _plan.goal;
-      last_plan_tick = memory._now();
-      on_plan(_plan);
-    }
+    if (is_undefined(planner) || is_undefined(memory)) { return undefined; }
+    if (!is_array(goals_to_check)) { return undefined; }
+    return _request_plan();
   };
 
   // Callback when a new/updated plan is available (no execution here)
@@ -107,7 +107,8 @@ function GOAP_Agent() constructor {
   };
 
   // ----- Update loop entrypoint (or call these separately from your Step) -----
-  tick = function() {
+  tick = function(_dt) {
+    if (is_undefined(_dt)) { _dt = 0; }
     if (is_undefined(memory)) { return; }
     var _now = memory._now();
 
@@ -116,13 +117,81 @@ function GOAP_Agent() constructor {
       tick_perception();
     }
 
-    if (_now >= _next_planning_tick) {
+    // Lazy planning tick: only trigger scheduled planning when idle
+    if (_now >= _next_planning_tick && is_undefined(_active_plan)) {
       _next_planning_tick = _now + config.planning_period;
-      tick_planning();
+      var _queued_plan = tick_planning();
+      if (!is_undefined(_queued_plan)) {
+        _active_plan = _queued_plan;
+      }
+    }
+
+    // Ensure executor exists
+    if (is_undefined(executor)) {
+      executor = new GOAP_Executor();
+    }
+
+    if (is_undefined(reservation_bus)) {
+      reservation_bus = {};
+    }
+
+    // Ensure a current plan exists and executor is started
+    if (is_undefined(_active_plan)) {
+      var _initial_plan = _request_plan();
+      if (!is_undefined(_initial_plan)) {
+        _active_plan = _initial_plan;
+        executor.clear_plan_invalidated();
+        executor.start(_active_plan, self, world, blackboard, memory, reservation_bus);
+      }
+    } else if (executor.status == "idle" || is_undefined(executor.plan_ref)) {
+      executor.clear_plan_invalidated();
+      executor.start(_active_plan, self, world, blackboard, memory, reservation_bus);
+    }
+
+    if (!is_undefined(executor)) {
+      executor.tick(_dt);
+    }
+
+    if (!is_undefined(executor) && (executor.was_plan_invalidated() || executor.status == "failed" || executor.status == "interrupted")) {
+      var _replan = _request_plan();
+      executor.clear_plan_invalidated();
+      if (!is_undefined(_replan)) {
+        _active_plan = _replan;
+        executor.start(_active_plan, self, world, blackboard, memory, reservation_bus);
+      } else {
+        _active_plan = undefined;
+      }
+    }
+
+    if (!is_undefined(executor) && executor.status == "finished") {
+      var _next_plan = _request_plan();
+      if (!is_undefined(_next_plan)) {
+        _active_plan = _next_plan;
+        executor.start(_active_plan, self, world, blackboard, memory, reservation_bus);
+      } else {
+        _active_plan = undefined;
+      }
     }
   };
 
   // ----- Deprecated/removed execution methods (intentionally absent) -----
   // No perform_action(), no update_action(), no stop_action(), no invariant checks.
   // Execution belongs to GOAP_Executor bound externally.
+
+  _request_plan = function() {
+    if (is_undefined(planner) || is_undefined(memory)) { return undefined; }
+    if (!is_array(goals_to_check)) { return undefined; }
+
+    _last_snapshot = memory.snapshot(false);
+    var _plan = planner.plan(self, goals_to_check, memory, last_goal);
+
+    if (!is_undefined(_plan)) {
+      last_plan = _plan;
+      last_goal = _plan.goal;
+      last_plan_tick = memory._now();
+      on_plan(_plan);
+    }
+
+    return _plan;
+  };
 }

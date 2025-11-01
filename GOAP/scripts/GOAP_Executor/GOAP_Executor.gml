@@ -12,6 +12,9 @@ function GOAP_Executor() constructor {
   held_reservations = [];         // array of currently held reservation keys
   _expected_duration = undefined; // expected duration hint for active action
   _owner_id = undefined;          // stable owner identifier for reservations
+  plan_invalidated = false;       // sticky until cleared by agent
+  on_plan_invalidated = undefined; // optional callback hook
+  _last_invalidate_reason = undefined;
 
   // Sticky execution context (provided at start)
   _agent = undefined;
@@ -41,6 +44,8 @@ function GOAP_Executor() constructor {
     held_reservations = [];
     _expected_duration = undefined;
     _owner_id = (is_struct(_agent) && variable_struct_exists(_agent, "id")) ? _agent.id : string(_agent);
+    plan_invalidated = false;
+    _last_invalidate_reason = undefined;
 
     step_index = -1;
     active_strategy = undefined;
@@ -95,6 +100,7 @@ function GOAP_Executor() constructor {
         active_strategy.stop(_ctx, "invariant_fail");
         _release_reservations();
         active_strategy = undefined;
+        _invalidate_plan("invariant_fail", _ctx);
         _set_status("interrupted");
         return status;
       }
@@ -107,6 +113,7 @@ function GOAP_Executor() constructor {
         active_strategy.stop(_ctx, "timeout");
         _release_reservations();
         active_strategy = undefined;
+        _invalidate_plan("timeout", _ctx);
         _set_status("failed");
         return status;
       }
@@ -156,6 +163,7 @@ function GOAP_Executor() constructor {
         active_strategy.stop(_ctx, "failed");
         _release_reservations();
         active_strategy = undefined;
+        _invalidate_plan("action_failed", _ctx);
         _set_status("failed");
         return status;
       } else if (_result == "interrupted") {
@@ -202,6 +210,19 @@ function GOAP_Executor() constructor {
     }
     _release_reservations();
     _set_status("interrupted");
+  };
+
+  clear_plan_invalidated = function() {
+    plan_invalidated = false;
+    _last_invalidate_reason = undefined;
+  };
+
+  was_plan_invalidated = function() {
+    return plan_invalidated;
+  };
+
+  get_invalidation_reason = function() {
+    return _last_invalidate_reason;
   };
 
   // --- Internals ---
@@ -295,6 +316,18 @@ function GOAP_Executor() constructor {
     }
     held_reservations = [];
     _expected_duration = undefined;
+  };
+
+  _invalidate_plan = function(_reason, _ctx) {
+    if (!plan_invalidated) {
+      plan_invalidated = true;
+      _last_invalidate_reason = _reason;
+      if (!is_undefined(on_plan_invalidated)) {
+        if (is_method(on_plan_invalidated) || is_function(on_plan_invalidated)) {
+          on_plan_invalidated(self, _reason, _ctx);
+        }
+      }
+    }
   };
 
   _make_context = function() {
