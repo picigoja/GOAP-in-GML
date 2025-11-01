@@ -1,0 +1,213 @@
+meta:
+  project: "Animus (GOAP-in-GML)"
+  helper_version: 1
+  conventions:
+    - "GML naming: variables snake_case, locals prefixed with _snake_case, constructors/functions PascalCase."
+    - "Public APIs: Animus_* primaries; GOAP_* shims only where explicitly provided."
+    - "Determinism: no wall clock or OS RNG in strategies; executor provides logical time + PRNG."
+    - "Debug gates via #macro ANIMUS_DEBUG."
+workflow:
+  unattended_task_policy:
+    selection_order: ["priority", "dependencies_cleared", "id"]
+    allowed_status_transitions:
+      - { from: "queued", to: "in_progress" }
+      - { from: "in_progress", to: "done" }
+      - { from: "queued", to: "blocked" }
+      - { from: "blocked", to: "queued" }
+    execution_loop:
+      - "Select the first task with status=queued, all dependencies done/absent."
+      - "Implement code changes."
+      - "Update this file: set task status=in_progress during work, then done on completion."
+      - "Append a log entry with files touched, summary, and acceptance verification."
+      - "Stop after one task. Do not start the next task automatically."
+tasks:
+  # Array of task objects. Each:
+  # - id: stable string (e.g., T01)
+  # - title: short imperative
+  # - description: concise details for implementation
+  # - acceptance: concrete checks to pass
+  # - status: queued|in_progress|done|blocked
+  # - priority: 1 (highest) .. 5 (lowest)
+  # - dependencies: [ids] (optional)
+  # - labels: [strings] (e.g., ["planner","executor","docs"])
+  # - anchors: optional hints to code locations or files
+  - id: T01
+    title: "Repo hygiene & resource correctness"
+    description: >
+      Regenerate/fix GOAP.yyp and GOAP.resource_order to reference actual Animus_* scripts.
+      Ensure .yy -> .gml pairs exist and remove legacy GOAP_* orphans.
+    acceptance:
+      - "Fresh import (IDE 2024.13.1.193 / Runtime 2024.13.1.242) yields no missing resource prompts."
+      - "Clean build with zero warnings."
+    status: queued
+    priority: 1
+    labels: ["packaging","project"]
+    anchors:
+      - "GOAP/GOAP.yyp"
+      - "GOAP/GOAP.resource_order"
+  - id: T02
+    title: "API freeze & compatibility contract"
+    description: >
+      Choose: implement full promised GOAP_* aliases (Action, Goal, Belief, Planner, Memory)
+      OR edit README to narrow promise. Standardize on Animus_Core.is_callable(...) across repo.
+      Add Animus_Core.assert guards for shape-sensitive returns (executor/planner).
+    acceptance:
+      - "Either GOAP_* aliases compile in a shim test OR README clearly documents deprecation/scope."
+      - "No stray is_callable(...) uses outside Animus_Core."
+    status: queued
+    priority: 1
+    dependencies: ["T01"]
+    labels: ["api","docs","safety"]
+    anchors:
+      - "GOAP/scripts/Animus_Core/Animus_Core.gml"
+      - "README.md"
+      - "GOAP/scripts/Animus_StrategyTemplates/Animus_StrategyTemplates.gml"
+  - id: T03
+    title: "Finalize Strategy templates (R1)"
+    description: >
+      Lock Instant, Timed, Move templates ensuring get_expected_duration(),
+      get_reservation_keys(), optional get_last_invariant_key(). No executor-side special cases.
+    acceptance:
+      - "Sample actions using each template run through Executor without custom glue."
+    status: queued
+    priority: 1
+    dependencies: ["T02"]
+    labels: ["executor","strategies"]
+    anchors:
+      - "Animus_StrategyTemplates.gml"
+      - "Animus_ActionStrategy.gml"
+  - id: T04
+    title: "Error surfaces (R2)"
+    description: >
+      Replace silent/undefined returns with explicit outcomes or DEBUG asserts.
+      Missing strategy methods emit actionable errors including action name.
+    acceptance:
+      - "Malformed strategies produce clear DEBUG errors; no silent failures."
+    status: queued
+    priority: 1
+    dependencies: ["T03"]
+    labels: ["safety","devx"]
+    anchors:
+      - "Animus_Executor.gml"
+      - "Animus_Core.gml"
+  - id: T05
+    title: "Referenced-keys audit (S2)"
+    description: >
+      Planner surfaces meta.referenced_keys as array and set-map.
+      Executor memory listener filters to those keys; coalesce rapid writes per tick.
+    acceptance:
+      - "Large-scene test shows no spurious invalidations from unrelated keys."
+      - "Touching a referenced key invalidates within one tick."
+    status: queued
+    priority: 2
+    dependencies: ["T03"]
+    labels: ["planner","executor","performance"]
+    anchors:
+      - "Animus_Planner.gml"
+      - "Animus_Executor.gml"
+  - id: T06
+    title: "Partial-plan handoff (S1)"
+    description: >
+      On budget exhaustion, Planner returns best partial with meta.is_partial=true and reason.
+      Executor invalidates at partial end and requests replanning.
+    acceptance:
+      - "Unreachable-goal scene advances via partials; no stalls."
+    status: queued
+    priority: 2
+    dependencies: ["T05"]
+    labels: ["planner","executor"]
+    anchors:
+      - "Animus_Planner.gml"
+      - "Animus_Executor.gml"
+  - id: T07
+    title: "Serialization & snapshot hardening (Q8)"
+    description: >
+      Lock executor.snapshot()/restore() shape; document plan identity remap.
+      Add round-trip tests at start, mid-run, mid-reservation.
+    acceptance:
+      - "Three deterministic replay tests pass with identical traces."
+    status: queued
+    priority: 2
+    labels: ["executor","persistence","testing"]
+    anchors:
+      - "Animus_Executor.gml"
+  - id: T08
+    title: "Memory contract: debounce & metadata clarity"
+    description: >
+      Ensure Belief debounce respects memory._now(); document auto-clean semantics.
+      Snapshot(include_metadata) deep-clones nested arrays/structs; add regression tests.
+    acceptance:
+      - "Debounce demo: stable truth under rapid writes."
+      - "Snapshot/restore of nested state matches JSON equality."
+    status: queued
+    priority: 3
+    labels: ["memory","belief","testing"]
+    anchors:
+      - "Animus_Belief.gml"
+      - "Animus_Memory.gml"
+  - id: T09
+    title: "Tooling polish: one true debug story"
+    description: >
+      Pick trace exposure: add executor.debug_trace_snapshot() OR refactor Animus_Debug to use executor.debug_json().
+      Unify playback/dump functions.
+    acceptance:
+      - "Single call prints readable plan+playback without API mismatch."
+    status: queued
+    priority: 3
+    labels: ["debug","tooling"]
+    anchors:
+      - "Animus_Debug.gml"
+      - "Animus_Executor.gml"
+  - id: T10
+    title: "Samples & docs"
+    description: >
+      Provide Minimal (hunger -> get food -> eat) and Move-style navigation samples using templates.
+      Update README Quickstart and add Migration Guide (GOAP_* -> Animus_*).
+    acceptance:
+      - "Paste-into-room samples run."
+      - "Migration guide closes alias/contract gap."
+    status: queued
+    priority: 3
+    labels: ["docs","samples"]
+    anchors:
+      - "README.md"
+      - "samples/*"
+  - id: T11
+    title: "Performance & determinism checks"
+    description: >
+      Microbench (10 agents x 20 actions x 5 goals) with planner time budgets (1-5ms).
+      Determinism: seed, run twice, byte-compare traces.
+    acceptance:
+      - "Planner respects time budgets."
+      - "Traces are identical across runs."
+    status: queued
+    priority: 4
+    labels: ["performance","determinism","testing"]
+    anchors:
+      - "bench/*.gml"
+  - id: T12
+    title: "Packaging & versioning"
+    description: >
+      Add CHANGELOG.md, LICENSE, semantic version tags. Tag v0.9.0 (Feature-Complete Beta).
+    acceptance:
+      - "v0.9.0 installs cleanly; only minor issues remain."
+    status: queued
+    priority: 4
+    dependencies: ["T01","T02","T03","T04","T05","T06","T07","T08","T09","T10","T11"]
+    labels: ["release"]
+    anchors:
+      - "CHANGELOG.md"
+      - "LICENSE"
+  - id: T13
+    title: "Release v1.0.0"
+    description: >
+      Freeze public contracts, fix blockers only, expand docs where questions repeat.
+      Tag v1.0.0 with guarantees (determinism, reuse, partials, snapshot stability).
+    acceptance:
+      - "No API churn since v0.9.0; projects built on v0.9.0 run without edits."
+    status: queued
+    priority: 5
+    dependencies: ["T12"]
+    labels: ["release"]
+log: []
+decisions: []
