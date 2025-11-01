@@ -26,6 +26,7 @@ function GOAP_Executor() constructor {
   _expected_duration = undefined; // expected duration hint for active action
   _owner_id = undefined;          // stable owner identifier for reservations
   plan_invalidated = false;       // sticky until cleared by agent
+  plan_is_partial = false;        // cached from plan meta
   on_plan_invalidated = undefined; // optional callback hook
   _last_invalidate_reason = undefined;
   logical_time = 0;               // logical clock advanced exclusively by caller-provided dt
@@ -146,6 +147,7 @@ function GOAP_Executor() constructor {
     }
 
     plan_ref = _plan;
+    plan_is_partial = false;
     _agent = _agent_ref;
     _world = _world_ref;
     _blackboard = _bb_ref;
@@ -155,13 +157,18 @@ function GOAP_Executor() constructor {
 
     if (!is_undefined(plan_ref) && is_struct(plan_ref) && variable_struct_exists(plan_ref, "meta")) {
       var _meta = plan_ref.meta;
-      if (is_struct(_meta) && variable_struct_exists(_meta, "referenced_keys")) {
-        var _rk = _meta.referenced_keys;
-        if (is_array(_rk)) {
-          _relevant_keys = {};
-          for (var _i = 0; _i < array_length(_rk); ++_i) {
-            var _key_name = string(_rk[_i]);
-            _relevant_keys[$ _key_name] = true;
+      if (is_struct(_meta)) {
+        if (variable_struct_exists(_meta, "is_partial")) {
+          plan_is_partial = bool(_meta.is_partial);
+        }
+        if (variable_struct_exists(_meta, "referenced_keys")) {
+          var _rk = _meta.referenced_keys;
+          if (is_array(_rk)) {
+            _relevant_keys = {};
+            for (var _i = 0; _i < array_length(_rk); ++_i) {
+              var _key_name = string(_rk[_i]);
+              _relevant_keys[$ _key_name] = true;
+            }
           }
         }
       }
@@ -189,6 +196,10 @@ function GOAP_Executor() constructor {
 
     if (status == "starting") {
       _set_status("finished");
+    }
+    if (status == "finished" && plan_is_partial) {
+      var _ctx_partial = _make_context();
+      _invalidate_plan("partial_plan_end", _ctx_partial);
     }
     return false;
   };
@@ -737,6 +748,10 @@ function GOAP_Executor() constructor {
           }
         } else {
           _set_status("finished");
+        }
+        if (status == "finished" && plan_is_partial) {
+          var _ctx_end = _make_context();
+          _invalidate_plan("partial_plan_end", _ctx_end);
         }
         if (status == "finished") {
           _detach_memory_listener();
