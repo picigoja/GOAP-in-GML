@@ -46,3 +46,47 @@ jobs:
       - name: Enforce strategy templates (report-only)
         run: |
           python tools/strategy_template_enforcer.py --strict || true
+  strategy_suggestions:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pyyaml
+      - name: Generate strategy suggestions (report)
+        run: python tools/strategy_template_enforcer.py --verbose || true
+      - name: Upload suggestions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: strategy-suggestions
+          path: tools/.strategy_suggestions.json
+      - name: Comment suggestions on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const p = 'tools/.strategy_suggestions.json';
+            if (!fs.existsSync(p)) {
+              core.info('No suggestions file found.');
+              return;
+            }
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            if (!data.non_templated || data.non_templated.length === 0) {
+              core.info('No non-templated strategies.');
+              return;
+            }
+            let body = '### Animus Strategy Suggestions\n';
+            for (const item of data.non_templated) {
+              body += `\n**${item.file}** → \`${item.suggested_kind}\`\n`;
+              body += `<details><summary>Suggested template code</summary>\n\n`;
+              body += '```gml\n' + item.suggested_template_code + '\n```\n';
+              body += '</details>\n';
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
