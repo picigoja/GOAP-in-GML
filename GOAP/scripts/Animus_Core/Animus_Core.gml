@@ -58,7 +58,13 @@ function Animus_Core() constructor {
     /// @param {String|Undefined} action_name
     /// @returns {Void}
     static assert_run_state = function(state, action_name) {
-        var valid = (state == "running") || (state == "success") || (state == "failed");
+        var state_string = is_string(state) ? state : string(state);
+        var valid =
+            (state_string == "running") ||
+            (state_string == "success") ||
+            (state_string == "failed") ||
+            (state_string == "interrupted") ||
+            (state_string == "timeout");
         var label = is_string(action_name) ? action_name : "<unknown>";
         Animus_Core.assert(valid, "[Animus_Executor] Strategy '" + label + "' returned invalid run state '" + string(state) + "'");
     };

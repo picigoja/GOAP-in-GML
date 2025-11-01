@@ -720,7 +720,16 @@ function GOAP_Executor() constructor {
 
     if (status == "running") {
       // Update current action
+      var _current_action = current_action();
+      var _action_label = "action@" + string(step_index);
+      if (is_struct(_current_action) && variable_struct_exists(_current_action, "name")) {
+        _action_label = string(_current_action.name);
+      }
+
       if (is_undefined(active_strategy)) {
+        #if DEBUG
+        Animus_Core.assert(false, "[Animus_Executor] Missing active strategy while running '" + _action_label + "'.");
+        #endif
         _release_reservations();
         _set_status("failed");
         return status;
@@ -729,7 +738,17 @@ function GOAP_Executor() constructor {
       var _ctx = _make_context();
 
       var _ok = active_strategy.invariant_check(_ctx);
-      if (is_undefined(_ok) || !_ok) {
+      #if DEBUG
+      Animus_Core.assert(!is_undefined(_ok), "[Animus_Executor] Strategy '" + _action_label + "' returned undefined from invariant_check()");
+      if (!is_undefined(_ok)) {
+        Animus_Core.assert(is_bool(_ok), "[Animus_Executor] Strategy '" + _action_label + "' invariant_check must return bool.");
+      }
+      #endif
+      if (is_undefined(_ok)) {
+        _ok = false;
+      }
+      var _ok_bool = is_bool(_ok) ? _ok : !!_ok;
+      if (!_ok_bool) {
         var _inv_key = undefined;
         if (variable_struct_exists(active_strategy, "get_last_invariant_key")) {
           if (is_method(active_strategy, "get_last_invariant_key")) {
@@ -778,18 +797,30 @@ function GOAP_Executor() constructor {
       var _result = active_strategy.update(_ctx, _dt);
       var _fail_reason = undefined;
 
-      // Normalize undefined/invalid results
+      #if DEBUG
+      Animus_Core.assert(!is_undefined(_result), "[Animus_Executor] Strategy '" + _action_label + "' returned undefined from update()");
+      if (!is_undefined(_result)) {
+        Animus_Core.assert(
+          (_result == Animus_RunState.RUNNING) || (_result == Animus_RunState.SUCCESS) || (_result == Animus_RunState.FAILED) || (_result == Animus_RunState.INTERRUPTED) || (_result == Animus_RunState.TIMEOUT),
+          "[Animus_Executor] Strategy '" + _action_label + "' returned invalid run state '" + string(_result) + "'"
+        );
+      }
+      #endif
+
       if (is_undefined(_result)) {
-        _result = "running";
-      } else if (!(_result == "running" || _result == "success" || _result == "failed" || _result == "interrupted")) {
-        _result = "failed";
+        _result = Animus_RunState.RUNNING;
+      }
+
+      var _valid_result = (_result == Animus_RunState.RUNNING) || (_result == Animus_RunState.SUCCESS) || (_result == Animus_RunState.FAILED) || (_result == Animus_RunState.INTERRUPTED) || (_result == Animus_RunState.TIMEOUT);
+      if (!_valid_result) {
         _fail_reason = "invalid_result";
+        _result = Animus_RunState.FAILED;
       }
 
       // Outcome handling
-      if (_result == "running") {
+      if (_result == Animus_RunState.RUNNING) {
         return status; // keep going
-      } else if (_result == "success") {
+      } else if (_result == Animus_RunState.SUCCESS) {
         // Cleanly stop and advance
         _set_status("stopping");
         active_strategy.stop(_ctx, "success");
@@ -835,7 +866,16 @@ function GOAP_Executor() constructor {
           _detach_memory_listener();
         }
         return status;
-      } else if (_result == "failed") {
+      } else if (_result == Animus_RunState.TIMEOUT) {
+        _set_status("stopping");
+        active_strategy.stop(_ctx, "timeout");
+        _release_reservations();
+        active_strategy = undefined;
+        _invalidate_plan("timeout", _ctx);
+        _detach_memory_listener();
+        _set_status("failed");
+        return status;
+      } else if (_result == Animus_RunState.FAILED) {
         // Stop and mark failed
         var _stop_reason = _fail_reason;
         if (is_undefined(_stop_reason)) {
@@ -849,7 +889,7 @@ function GOAP_Executor() constructor {
         _detach_memory_listener();
         _set_status("failed");
         return status;
-      } else if (_result == "interrupted") {
+      } else if (_result == Animus_RunState.INTERRUPTED) {
         // Stop and mark interrupted
         _set_status("stopping");
         active_strategy.stop(_ctx, "interrupted");
@@ -989,12 +1029,18 @@ function GOAP_Executor() constructor {
       active_strategy = undefined;
       return false;
     }
+    #if DEBUG
+    Animus_Core.assert(is_struct(plan_ref) && variable_struct_exists(plan_ref, "actions"), "[Animus_Executor] Expected plan.actions array when advancing executor step.");
+    #endif
     if (!is_struct(plan_ref) || !variable_struct_exists(plan_ref, "actions")) {
       active_strategy = undefined;
       return false;
     }
 
     var _actions = plan_ref.actions;
+    #if DEBUG
+    Animus_Core.assert(is_array(_actions), "[Animus_Executor] plan.actions must be an array when advancing executor step.");
+    #endif
     if (!is_array(_actions)) {
       active_strategy = undefined;
       return false;
@@ -1248,3 +1294,4 @@ function GOAP_Executor() constructor {
 function Animus_Executor() constructor {
   return GOAP_Executor();
 }
+

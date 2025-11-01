@@ -1,7 +1,7 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-01T19:18:17.6221269Z"
+  updated_at: "2025-11-01T19:24:56.6233952Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
@@ -126,7 +126,7 @@ tasks:
       Missing strategy methods emit actionable errors including the action name.
     acceptance:
       - "Malformed strategies produce clear DEBUG errors; no silent failures."
-    status: queued
+    status: done
     priority: 1
     dependencies: ["T03"]
     labels: ["safety", "devx"]
@@ -283,4 +283,13 @@ log:
       - "GOAP/Animus_CodexHelper.yaml"
     acceptance_verification:
       - "Sample actions using each template run through Executor without custom glue. - PASS: Strategy_Instant/Timed/Move now explicitly implement get_expected_duration and reservation key accessors on their Animus_ActionStrategy outputs, satisfying the executor shape checks (code inspection)."
+  - when: "2025-11-01T19:24:56.6233952Z"
+    task_id: "T04"
+    summary: "Added debug asserts for malformed strategies and surfaced executor error messages with action labels."
+    files_touched:
+      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
+      - "GOAP/scripts/Animus_Core/Animus_Core.gml"
+      - "GOAP/Animus_CodexHelper.yaml"
+    acceptance_verification:
+      - "Malformed strategies produce clear DEBUG errors; no silent failures. - PASS: executor now asserts on missing strategy methods and undefined run states/invariant returns, emitting action-tagged messages (code inspection)."
 decisions: []
