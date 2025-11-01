@@ -11,6 +11,10 @@ template_namespace_regex: "\\bAnimus_StrategyTemplates\\s*\\."
 # NEW: allow injection near an inline struct-return even without build_strategy
 allow_inline_return_scaffold: true
 
+# Suggestion emitter options
+enable_suggestions: true
+suggestion_report_path: "tools/.strategy_suggestions.json"
+
 # Heuristics to guess the legacy strategy pattern
 instant_heuristics:
   - "\\bupdate\\s*=\\s*function\\s*\\(.*?\\)\\s*\\{[^}]*\\breturn\\s+\\\"success\\\"\\s*;[^}]*\\}"

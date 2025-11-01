@@ -1,0 +1,185 @@
+{
+  "generated_at": "2025-11-01 23:15:13",
+  "non_templated": [
+    {
+      "file": "GOAP/scripts/Animus_Action/Animus_Action.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 1,
+        "timed": 2,
+        "move": 2
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Agent/Animus_Agent.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Belief/Animus_Belief.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Core/Animus_Core.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Debug/Animus_Debug.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Executor/Animus_Executor.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 2,
+        "move": 1
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Goal/Animus_Goal.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Memory/Animus_Memory.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Plan/Animus_Plan.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Planner/Animus_Planner.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Predicate/Animus_Predicate.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_RunState/Animus_RunState.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_Sensor/Animus_Sensor.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    },
+    {
+      "file": "GOAP/scripts/Animus_SensorHub/Animus_SensorHub.gml",
+      "suggested_kind": "timed",
+      "scores": {
+        "instant": 0,
+        "timed": 0,
+        "move": 0
+      },
+      "anchor_type": null,
+      "anchor_index": null,
+      "suggested_template_code": "return Animus_StrategyTemplates.timed({\n    expected_duration: (Animus_Core.is_callable(self.get_expected_duration) ? self.get_expected_duration() : 0.6),\n    timeout: undefined,\n    on_start: function(ctx) { if (Animus_Core.is_callable(self.start)) self.start(ctx); },\n    on_stop:  function(ctx, reason) { if (Animus_Core.is_callable(self.stop)) self.stop(ctx, reason); }\n});"
+    }
+  ]
+}
