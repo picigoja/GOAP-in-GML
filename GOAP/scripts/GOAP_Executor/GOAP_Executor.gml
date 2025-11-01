@@ -84,6 +84,37 @@ function GOAP_Executor() constructor {
     }
   };
 
+  var _check_strategy_shape = function(_strat, _act_name) {
+    #if DEBUG
+    var _missing = [];
+    var _record_missing = function(_name) {
+      array_push(_missing, _name);
+    };
+    var _is_callable_member = function(_owner, _name) {
+      if (!variable_struct_exists(_owner, _name)) {
+        return false;
+      }
+      var _member = variable_struct_get(_owner, _name);
+      return is_function(_member) || is_method(_member);
+    };
+
+    if (!_is_callable_member(_strat, "start")) _record_missing("start");
+    if (!_is_callable_member(_strat, "update")) _record_missing("update");
+    if (!_is_callable_member(_strat, "stop")) _record_missing("stop");
+    if (!_is_callable_member(_strat, "invariant_check")) _record_missing("invariant_check");
+    if (!_is_callable_member(_strat, "get_expected_duration")) _record_missing("get_expected_duration");
+    if (!_is_callable_member(_strat, "get_reservation_keys")) _record_missing("get_reservation_keys");
+
+    if (array_length(_missing) > 0) {
+      for (var _m = 0; _m < array_length(_missing); ++_m) {
+        show_debug_message("[GOAP_Executor][ERROR] Missing strategy method '" + _missing[_m] + "' for action '" + _act_name + "'");
+      }
+      return false;
+    }
+    #endif
+    return true;
+  };
+
   var _clone_snapshot_value = function(_value) {
     if (is_array(_value)) {
       var _len = array_length(_value);
@@ -656,9 +687,15 @@ function GOAP_Executor() constructor {
 
       // Runtime-only: Strategy drives lifecycles
       var _result = active_strategy.update(_ctx, _dt);
+      var _fail_reason = undefined;
 
-      // Normalize undefined -> "running"
-      if (is_undefined(_result)) _result = "running";
+      // Normalize undefined/invalid results
+      if (is_undefined(_result)) {
+        _result = "running";
+      } else if (!(_result == "running" || _result == "success" || _result == "failed" || _result == "interrupted")) {
+        _result = "failed";
+        _fail_reason = "invalid_result";
+      }
 
       // Outcome handling
       if (_result == "running") {
@@ -707,8 +744,12 @@ function GOAP_Executor() constructor {
         return status;
       } else if (_result == "failed") {
         // Stop and mark failed
+        var _stop_reason = _fail_reason;
+        if (is_undefined(_stop_reason)) {
+          _stop_reason = "failed";
+        }
         _set_status("stopping");
-        active_strategy.stop(_ctx, "failed");
+        active_strategy.stop(_ctx, _stop_reason);
         _release_reservations();
         active_strategy = undefined;
         _invalidate_plan("action_failed", _ctx);
@@ -873,11 +914,11 @@ function GOAP_Executor() constructor {
     }
 
     var _action = _actions[step_index];
-    var _dbg_name = undefined;
+    var action_name = undefined;
     if (is_struct(_action) && variable_struct_exists(_action, "name")) {
-      _dbg_name = _action.name;
+      action_name = _action.name;
     } else {
-      _dbg_name = "action@" + string(step_index);
+      action_name = "action@" + string(step_index);
     }
 
     // Instantiate per-action runtime adapter
@@ -885,7 +926,13 @@ function GOAP_Executor() constructor {
     elapsed_in_step = 0;
     held_reservations = [];
     _expected_duration = undefined;
-    _trace(_DBG_T_ACTION_STEP, step_index, _dbg_name);
+    _trace(_DBG_T_ACTION_STEP, step_index, action_name);
+
+    if (!_check_strategy_shape(active_strategy, action_name)) {
+      active_strategy = undefined;
+      _set_status("failed");
+      return false;
+    }
 
     var _ctx = _make_context();
 
