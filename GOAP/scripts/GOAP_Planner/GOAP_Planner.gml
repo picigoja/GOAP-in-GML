@@ -293,6 +293,15 @@ function GOAP_Planner() constructor {
     }
   };
 
+  var _ref_keys_to_array = function(_set) {
+    var _arr = [];
+    var _names = variable_struct_get_names(_set);
+    for (var _i = 0; _i < array_length(_names); ++_i) {
+      array_push(_arr, _names[_i]);
+    }
+    return _arr;
+  };
+
   plan = function(_agent, _goals, _memory, _most_recent_goal) {
     var _snapshot = _memory.snapshot(false);
     var _tick = _memory._now();
@@ -393,8 +402,9 @@ function GOAP_Planner() constructor {
           _plan_state = _action_apply(_act, _plan_state, _beliefs, _memory);
         }
 
-        var _meta_referenced = {};
-        _merge_referenced_keys(_meta_referenced, _goal_referenced);
+        var _ref_keys = {};
+        _merge_referenced_keys(_ref_keys, _goal_referenced);
+        var _ref_keys_array = array_unique(_ref_keys_to_array(_ref_keys));
 
         var _expansions_used = variable_struct_exists(_search_result, "expansions_used") ? _search_result.expansions_used : _search_result.nodes_expanded;
         var _is_partial_plan = false;
@@ -424,7 +434,7 @@ function GOAP_Planner() constructor {
           nodes_expanded: _search_result.nodes_expanded,
           nodes_generated: _search_result.nodes_generated,
           open_peak: _search_result.open_peak,
-          referenced_keys: _meta_referenced,
+          referenced_keys: _ref_keys_array,
           state_hash_start: _state_hash(_initial_state),
           state_hash_end: _state_hash(_plan_state),
           expansions_used: _expansions_used,
@@ -763,13 +773,22 @@ function GOAP_Planner() constructor {
       if (bool(_meta.is_partial)) return false;
     }
     if (!is_struct(_meta) || !variable_struct_exists(_meta, "referenced_keys")) return false;
-    var _keys_struct = _meta.referenced_keys;
-    if (!is_struct(_keys_struct)) return false;
-    var _keys = variable_struct_get_names(_keys_struct);
+    var _keys_source = _meta.referenced_keys;
+    var _keys = [];
+    if (is_array(_keys_source)) {
+      _keys = _keys_source;
+    } else if (is_struct(_keys_source)) {
+      _keys = variable_struct_get_names(_keys_source);
+    } else {
+      return false;
+    }
     var _len = array_length(_keys);
     var _built_tick = variable_struct_exists(_meta, "built_at_tick") ? _meta.built_at_tick : -1;
     for (var _i = 0; _i < _len; ++_i) {
-      var _key = _keys[_i];
+      var _key_entry = _keys[_i];
+      if (is_undefined(_key_entry)) continue;
+      var _key = string(_key_entry);
+      if (_key == "") continue;
       if (_memory.is_dirty(_key)) return false;
       if (_memory.last_updated(_key) > _built_tick) return false;
     }
