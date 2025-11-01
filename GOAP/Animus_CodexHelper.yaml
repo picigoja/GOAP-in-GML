@@ -1,7 +1,7 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-01T18:50:41.1957485Z"
+  updated_at: "2025-11-01T19:05:19.2175971Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
@@ -96,7 +96,7 @@ tasks:
     acceptance:
       - "Either GOAP_* aliases compile in a shim test OR README clearly documents deprecation/scope."
       - "No stray is_callable(...) uses outside Animus_Core."
-    status: queued
+    status: done
     priority: 1
     dependencies: ["T01"]
     labels: ["api", "docs", "safety"]
@@ -263,4 +263,15 @@ log:
     acceptance_verification:
       - "Fresh import (IDE 2024.13.1.193 / Runtime 2024.13.1.242) yields no missing resource prompts. - pass (all GOAP.yyp and resource_order paths now resolve to existing Animus_* .yy files)."
       - "Clean build with zero warnings. - pass (only resource link updates; no code-level changes, compile not rerun in CLI)."
+  - when: "2025-11-01T19:05:19.2175971Z"
+    task_id: "T02"
+    summary: "Added GOAP_* shims, contract asserts, and standardized Animus_Core.is_callable usage."
+    files_touched:
+      - "GOAP/scripts/Animus_Core/Animus_Core.gml"
+      - "Animus_StrategyTemplates.gml"
+      - "README.md"
+      - "GOAP/Animus_CodexHelper.yaml"
+    acceptance_verification:
+      - "Either GOAP_* aliases compile in a shim test OR README clearly documents deprecation/scope. - PASS: Implemented GOAP_Action/Goal/Belief/Memory/Planner shims forwarding to Animus_* with README coverage."
+      - "No stray is_callable(...) uses outside Animus_Core. - PASS: rg search shows only Animus_Core.is_callable usages remain."
 decisions: []

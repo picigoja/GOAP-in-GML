@@ -32,6 +32,37 @@ function Animus_Core() constructor {
         return is_function(value) || is_method(value);
     };
 
+    /// @desc Validates the shape of a plan struct returned by the planner.
+    /// @param {Struct|Undefined} plan
+    /// @param {String|Undefined} context
+    /// @returns {Void}
+    static assert_plan_shape = function(plan, context) {
+        if (is_undefined(plan)) {
+            return;
+        }
+        var label = is_string(context) ? context : "Animus_Planner.plan";
+        Animus_Core.assert(is_struct(plan), label + " expected plan struct");
+        var has_actions = is_struct(plan) && variable_struct_exists(plan, "actions");
+        Animus_Core.assert(has_actions && is_array(plan.actions), label + " expected plan.actions array");
+        var has_meta = is_struct(plan) && variable_struct_exists(plan, "meta");
+        Animus_Core.assert(has_meta && is_struct(plan.meta), label + " expected plan.meta struct");
+        if (has_meta && variable_struct_exists(plan.meta, "referenced_keys")) {
+            var keys_ref = plan.meta.referenced_keys;
+            var valid_keys = is_array(keys_ref) || is_struct(keys_ref);
+            Animus_Core.assert(valid_keys, label + " expected meta.referenced_keys array or struct");
+        }
+    };
+
+    /// @desc Guards executor strategy return values.
+    /// @param {Any} state
+    /// @param {String|Undefined} action_name
+    /// @returns {Void}
+    static assert_run_state = function(state, action_name) {
+        var valid = (state == "running") || (state == "success") || (state == "failed");
+        var label = is_string(action_name) ? action_name : "<unknown>";
+        Animus_Core.assert(valid, "[Animus_Executor] Strategy '" + label + "' returned invalid run state '" + string(state) + "'");
+    };
+
     /// @desc Produces a readable string for debugging values.
     /// @param {Any} value
     /// @returns {String}
@@ -103,3 +134,35 @@ function Animus_Core() constructor {
 }
 
 Animus_Core();
+
+/// @desc Backward compatible GOAP_* constructor aliases.
+function GOAP_Action(name, preconditions, effects, cost) constructor {
+    return Animus_Action(name, preconditions, effects, cost);
+}
+
+function GOAP_Goal(name, desired_effects, priority) constructor {
+    return Animus_Goal(name, desired_effects, priority);
+}
+
+function GOAP_Belief(name, config, evaluator) constructor {
+    return Animus_Belief(name, config, evaluator);
+}
+
+function GOAP_Memory() constructor {
+    return Animus_Memory();
+}
+
+function GOAP_Planner() constructor {
+    var planner = new Animus_Planner();
+    if (Animus_Core.is_callable(planner.plan)) {
+        var original_plan = planner.plan;
+        planner.plan = function(agent, goals, memory, last_goal) {
+            var plan = original_plan(agent, goals, memory, last_goal);
+            if (!is_undefined(plan)) {
+                Animus_Core.assert_plan_shape(plan, "Animus_Planner.plan");
+            }
+            return plan;
+        };
+    }
+    return planner;
+}

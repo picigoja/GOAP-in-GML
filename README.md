@@ -2,7 +2,7 @@
 
 Animus is a modular Goal Oriented Action Planning (GOAP) toolkit for GameMaker. It focuses on clean separation between declarative planning data (beliefs, goals, actions) and the runtime systems that execute the chosen plan (strategies, sensors, reservations). The project started as a port of git-amend’s Unity sample, but has evolved into a purpose-built GML framework with deterministic planning, plan reuse, and tooling for debugging agent behaviour.
 
-Animus ships with compatibility aliases (`GOAP_*`) so existing prototypes continue to compile, but new work should use the `Animus_*` APIs shown below.
+Animus ships with compatibility aliases (`GOAP_*`) for the canonical constructors (Action, Goal, Belief, Memory, Planner) so existing prototypes continue to compile, but new work should use the `Animus_*` APIs shown below.
 
 ## Core Scripts
 - `Animus_Core` – logging, assertions, helpers
@@ -147,7 +147,8 @@ Add sensors with `sensor_hub.add_sensor(sensor)`. Each sensor receives the memor
 - `executor.playback_to_string(plan)` → merged plan + trace log
 
 ### Compatibility Notes
-- Existing code that references `GOAP_*` constructors will continue to work; each now forwards to its `Animus_*` counterpart.
+- Existing code that references `GOAP_*` constructors (Action, Goal, Belief, Memory, Planner) continues to work; each now forwards to its `Animus_*` counterpart with runtime contract guards.
+- `Animus_Core.assert_plan_shape(...)` and `Animus_Core.assert_run_state(...)` verify planner results and strategy return states, surfacing actionable errors when shapes drift.
 - New code should adopt the Animus naming to avoid future removals of legacy aliases.
 - Strategy shape changed: implement `stop`, `invariant_check`, `get_expected_duration`, and `get_reservation_keys` (templates updated accordingly).
 - `Animus_Memory` gained `read`, `write`, and `snapshot` helpers; agent and executor now rely on them.

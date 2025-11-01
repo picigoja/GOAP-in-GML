@@ -5,13 +5,13 @@
 function _MakeBaseStrategy(_action_ref) {
     var _S = new Animus_ActionStrategy(_action_ref); // keeps shape & defaults
     // Ensure all required fns exist, even if overridden later
-    if (!is_callable(_S.start))                  _S.start                  = function(_) {};
-    if (!is_callable(_S.update))                 _S.update                 = function(_, __) { return "running"; };
-    if (!is_callable(_S.stop))                   _S.stop                   = function(_, __) {};
-    if (!is_callable(_S.invariant_check))        _S.invariant_check        = function(_) { return true; };
-    if (!is_callable(_S.get_expected_duration))  _S.get_expected_duration  = function(_) { return undefined; };
-    if (!is_callable(_S.get_reservation_keys))   _S.get_reservation_keys   = function(_) { return []; };
-    if (!is_callable(_S.get_last_invariant_key)) _S.get_last_invariant_key = function() { return undefined; };
+    if (!Animus_Core.is_callable(_S.start))                  _S.start                  = function(_) {};
+    if (!Animus_Core.is_callable(_S.update))                 _S.update                 = function(_, __) { return "running"; };
+    if (!Animus_Core.is_callable(_S.stop))                   _S.stop                   = function(_, __) {};
+    if (!Animus_Core.is_callable(_S.invariant_check))        _S.invariant_check        = function(_) { return true; };
+    if (!Animus_Core.is_callable(_S.get_expected_duration))  _S.get_expected_duration  = function(_) { return undefined; };
+    if (!Animus_Core.is_callable(_S.get_reservation_keys))   _S.get_reservation_keys   = function(_) { return []; };
+    if (!Animus_Core.is_callable(_S.get_last_invariant_key)) _S.get_last_invariant_key = function() { return undefined; };
     return _S;
 }
 
@@ -22,24 +22,26 @@ function Strategy_Instant(_action_ref, _params) {
     var _done = false;
 
     var _opts = is_struct(_params) ? _params : {};
-    var _invariant_fn = is_callable(_opts.invariant_fn) ? _opts.invariant_fn : undefined;
-    var _on_start     = is_callable(_opts.on_start) ? _opts.on_start : undefined;
-    var _on_success   = is_callable(_opts.on_success) ? _opts.on_success : undefined;
+    var _action_name = (is_struct(_action_ref) && variable_struct_exists(_action_ref, "name")) ? string(_action_ref.name) : "<instant>";
+    var _invariant_fn = Animus_Core.is_callable(_opts.invariant_fn) ? _opts.invariant_fn : undefined;
+    var _on_start     = Animus_Core.is_callable(_opts.on_start) ? _opts.on_start : undefined;
+    var _on_success   = Animus_Core.is_callable(_opts.on_success) ? _opts.on_success : undefined;
 
     S.start = function(ctx) {
         _done = false;
-        if (is_callable(_on_start)) _on_start(ctx);
+        if (Animus_Core.is_callable(_on_start)) _on_start(ctx);
     };
     S.update = function(ctx, dt) {
+        var _state = "success";
         if (!_done) {
             _done = true;
-            if (is_callable(_on_success)) _on_success(ctx);
-            return "success";
+            if (Animus_Core.is_callable(_on_success)) _on_success(ctx);
         }
-        return "success";
+        Animus_Core.assert_run_state(_state, _action_name);
+        return _state;
     };
     S.invariant_check = function(ctx) {
-        return is_callable(_invariant_fn) ? !!_invariant_fn(ctx) : true;
+        return Animus_Core.is_callable(_invariant_fn) ? !!_invariant_fn(ctx) : true;
     };
     return S;
 }
@@ -57,33 +59,35 @@ function Strategy_Timed(_action_ref, _params) {
     var _soft_timeout_s = variable_struct_exists(_opts, "soft_timeout_s") ? _opts.soft_timeout_s : undefined;
 
     var _elapsed = 0;
-    var _invariant_fn = is_callable(_opts.invariant_fn) ? _opts.invariant_fn : undefined;
-    var _on_start     = is_callable(_opts.on_start) ? _opts.on_start : undefined;
-    var _on_tick      = is_callable(_opts.on_tick) ? _opts.on_tick : undefined;
-    var _on_success   = is_callable(_opts.on_success) ? _opts.on_success : undefined;
-    var _on_fail      = is_callable(_opts.on_fail) ? _opts.on_fail : undefined;
+    var _invariant_fn = Animus_Core.is_callable(_opts.invariant_fn) ? _opts.invariant_fn : undefined;
+    var _on_start     = Animus_Core.is_callable(_opts.on_start) ? _opts.on_start : undefined;
+    var _on_tick      = Animus_Core.is_callable(_opts.on_tick) ? _opts.on_tick : undefined;
+    var _on_success   = Animus_Core.is_callable(_opts.on_success) ? _opts.on_success : undefined;
+    var _on_fail      = Animus_Core.is_callable(_opts.on_fail) ? _opts.on_fail : undefined;
+    var _action_name  = (is_struct(_action_ref) && variable_struct_exists(_action_ref, "name")) ? string(_action_ref.name) : "<timed>";
 
     S.start = function(ctx) {
         _elapsed = 0;
-        if (is_callable(_on_start)) _on_start(ctx);
+        if (Animus_Core.is_callable(_on_start)) _on_start(ctx);
     };
     S.update = function(ctx, dt) {
         _elapsed += dt;
-        if (is_callable(_on_tick)) _on_tick(ctx, _elapsed);
+        if (Animus_Core.is_callable(_on_tick)) _on_tick(ctx, _elapsed);
 
+        var _state = "running";
         if (!is_undefined(_soft_timeout_s) && _elapsed >= _soft_timeout_s && _elapsed < _target_s) {
-            if (is_callable(_on_fail)) _on_fail(ctx);
-            return "failed"; // internal soft timeout shorter than expected_s/target_s
+            if (Animus_Core.is_callable(_on_fail)) _on_fail(ctx);
+            _state = "failed"; // internal soft timeout shorter than expected_s/target_s
+        } else if (_elapsed >= _target_s) {
+            if (Animus_Core.is_callable(_on_success)) _on_success(ctx);
+            _state = "success";
         }
 
-        if (_elapsed >= _target_s) {
-            if (is_callable(_on_success)) _on_success(ctx);
-            return "success";
-        }
-        return "running";
+        Animus_Core.assert_run_state(_state, _action_name);
+        return _state;
     };
     S.invariant_check = function(ctx) {
-        return is_callable(_invariant_fn) ? !!_invariant_fn(ctx) : true;
+        return Animus_Core.is_callable(_invariant_fn) ? !!_invariant_fn(ctx) : true;
     };
     S.get_expected_duration = function(ctx) {
         return _expected_s; // lets Executor enforce hard timeout if needed (Q3)
@@ -109,33 +113,36 @@ function Strategy_Move(_action_ref, _params) {
     var _reached_fn  = _opts.reached_fn;
     var _arrive_dist = max(0, is_real(_opts.arrive_dist) ? _opts.arrive_dist : 0);
     var _expected_s  = variable_struct_exists(_opts, "expected_s") ? _opts.expected_s : undefined;
-    var _on_start    = is_callable(_opts.on_start) ? _opts.on_start : undefined;
-    var _on_tick     = is_callable(_opts.on_tick) ? _opts.on_tick : undefined;
-    var _on_stop     = is_callable(_opts.on_stop) ? _opts.on_stop : undefined;
-    var _on_arrive   = is_callable(_opts.on_arrive) ? _opts.on_arrive : undefined;
+    var _on_start    = Animus_Core.is_callable(_opts.on_start) ? _opts.on_start : undefined;
+    var _on_tick     = Animus_Core.is_callable(_opts.on_tick) ? _opts.on_tick : undefined;
+    var _on_stop     = Animus_Core.is_callable(_opts.on_stop) ? _opts.on_stop : undefined;
+    var _on_arrive   = Animus_Core.is_callable(_opts.on_arrive) ? _opts.on_arrive : undefined;
+    var _action_name = (is_struct(_action_ref) && variable_struct_exists(_action_ref, "name")) ? string(_action_ref.name) : "<move>";
 
     var _last_bad_key = undefined;
 
     S.start = function(ctx) {
-        if (is_callable(_on_start)) _on_start(ctx);
+        if (Animus_Core.is_callable(_on_start)) _on_start(ctx);
     };
 
     S.update = function(ctx, dt) {
-        if (is_callable(_on_tick)) _on_tick(ctx, dt);
-        if (is_callable(_reached_fn) && _reached_fn(ctx, _arrive_dist)) {
-            if (is_callable(_on_arrive)) _on_arrive(ctx);
-            return "success";
+        if (Animus_Core.is_callable(_on_tick)) _on_tick(ctx, dt);
+        var _state = "running";
+        if (Animus_Core.is_callable(_reached_fn) && _reached_fn(ctx, _arrive_dist)) {
+            if (Animus_Core.is_callable(_on_arrive)) _on_arrive(ctx);
+            _state = "success";
         }
-        return "running";
+        Animus_Core.assert_run_state(_state, _action_name);
+        return _state;
     };
 
     S.stop = function(ctx, reason) {
-        if (is_callable(_on_stop)) _on_stop(ctx, reason);
+        if (Animus_Core.is_callable(_on_stop)) _on_stop(ctx, reason);
     };
 
     S.invariant_check = function(ctx) {
-        var _ok = is_callable(_path_ok_fn) ? !!_path_ok_fn(ctx) : true;
-        if (!_ok) _last_bad_key = is_callable(_nav_key_fn) ? _nav_key_fn(ctx) : undefined;
+        var _ok = Animus_Core.is_callable(_path_ok_fn) ? !!_path_ok_fn(ctx) : true;
+        if (!_ok) _last_bad_key = Animus_Core.is_callable(_nav_key_fn) ? _nav_key_fn(ctx) : undefined;
         return _ok;
     };
 
@@ -148,7 +155,7 @@ function Strategy_Move(_action_ref, _params) {
     };
 
     S.get_reservation_keys = function(ctx) {
-        if (is_callable(_nav_key_fn)) {
+        if (Animus_Core.is_callable(_nav_key_fn)) {
             var _k = _nav_key_fn(ctx);
             return is_undefined(_k) ? [] : [_k];
         }
