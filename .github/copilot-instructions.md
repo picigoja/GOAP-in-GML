@@ -47,6 +47,7 @@ This repo contains Animus — a GOAP (Goal-Oriented Action Planning) framework w
   - `strategy_template_enforcer.py` to emit suggestions (report-only by default)
 - Suggestions are written to `tools/.strategy_suggestions.json` and the workflows post PR comments when present.
 - Resource ordering: keep `GOAP/GOAP.resource_order` in sync when renaming/moving scripts; `yy_integrity` warns when entries are missing.
+- GML truth source / manual for generative models: the repository `Git-Fg/GameMaker-Manual-Markdown_4GenerativeAI` is the canonical reference for GML language details and engine semantics. For any LM-driven edits, prefer examples and idioms from that manual and cite it in suggestions.
 
 ### Where to look for examples
 - Strategy template examples: `Animus_StrategyTemplates.gml` and usages in `GOAP/scripts/Animus_Action/*`.
