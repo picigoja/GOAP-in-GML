@@ -162,12 +162,32 @@ function GOAP_Executor() constructor {
           plan_is_partial = bool(_meta.is_partial);
         }
         if (variable_struct_exists(_meta, "referenced_keys")) {
-          var _rk = _meta.referenced_keys;
-          if (is_array(_rk)) {
-            _relevant_keys = {};
-            for (var _i = 0; _i < array_length(_rk); ++_i) {
-              var _key_name = string(_rk[_i]);
-              _relevant_keys[$ _key_name] = true;
+          var _rk_source = _meta.referenced_keys;
+          var _rk_list = [];
+          if (is_array(_rk_source)) {
+            _rk_list = _rk_source;
+          } else if (is_struct(_rk_source)) {
+            _rk_list = variable_struct_get_names(_rk_source);
+          }
+          if (is_array(_rk_list)) {
+            var _candidate_keys = {};
+            var _inserted = false;
+            for (var _i = 0; _i < array_length(_rk_list); ++_i) {
+              var _rk_value = _rk_list[_i];
+              if (is_undefined(_rk_value)) {
+                continue;
+              }
+              var _key_name = string(_rk_value);
+              if (_key_name == "") {
+                continue;
+              }
+              if (!variable_struct_exists(_candidate_keys, _key_name)) {
+                _candidate_keys[$ _key_name] = true;
+                _inserted = true;
+              }
+            }
+            if (_inserted) {
+              _relevant_keys = _candidate_keys;
             }
           }
         }
@@ -1022,11 +1042,9 @@ function GOAP_Executor() constructor {
         if (is_undefined(_executor_ref.plan_ref)) {
           return;
         }
-        if (!is_undefined(_executor_ref._relevant_keys)) {
-          var _k = string(_key);
-          if (!variable_struct_exists(_executor_ref._relevant_keys, _k)) {
-            return;
-          }
+        var _keys = _executor_ref._relevant_keys;
+        if (!is_undefined(_keys) && !variable_struct_exists(_keys, string(_key))) {
+          return;
         }
         _executor_ref._plan_stale = true;
       };
