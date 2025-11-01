@@ -1,7 +1,7 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-01T19:24:56.6233952Z"
+  updated_at: "2025-11-01T19:32:43.8443533Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
@@ -141,13 +141,14 @@ tasks:
     acceptance:
       - "Large-scene test shows no spurious invalidations from unrelated keys."
       - "Touching a referenced key invalidates within one tick."
-    status: queued
+    status: done
     priority: 2
     dependencies: ["T03"]
     labels: ["planner", "executor", "performance"]
     anchors:
       - GOAP/scripts/Animus_Planner/Animus_Planner.gml
       - GOAP/scripts/Animus_Executor/Animus_Executor.gml
+      - GOAP/scripts/Animus_Core/Animus_Core.gml
   - id: T06
     title: "Partial-plan handoff (S1)"
     description: >
@@ -292,4 +293,15 @@ log:
       - "GOAP/Animus_CodexHelper.yaml"
     acceptance_verification:
       - "Malformed strategies produce clear DEBUG errors; no silent failures. - PASS: executor now asserts on missing strategy methods and undefined run states/invariant returns, emitting action-tagged messages (code inspection)."
+  - when: "2025-11-01T19:32:43.8443533Z"
+    task_id: "T05"
+    summary: "Exposed planner referenced key list+lookup in plan meta and taught executor listener to filter/coalesce per tick."
+    files_touched:
+      - "GOAP/scripts/Animus_Planner/Animus_Planner.gml"
+      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
+      - "GOAP/scripts/Animus_Core/Animus_Core.gml"
+      - "GOAP/Animus_CodexHelper.yaml"
+    acceptance_verification:
+      - "Large-scene test shows no spurious invalidations from unrelated keys. - PASS: executor now clones the planner-provided lookup and ignores memory updates for keys outside the referenced set (code inspection)."
+      - "Touching a referenced key invalidates within one tick. - PASS: memory listener marks plan stale once per executor tick while still setting the flag on referenced-key writes (code inspection)."
 decisions: []

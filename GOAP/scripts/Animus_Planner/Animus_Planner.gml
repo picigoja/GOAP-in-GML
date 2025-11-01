@@ -125,6 +125,32 @@ function Animus_Planner() constructor {
         }
     };
 
+    var clone_key_set = function(source_keys) {
+        var clone = {};
+        if (!is_struct(source_keys)) {
+            return clone;
+        }
+        var names = variable_struct_get_names(source_keys);
+        var len = array_length(names);
+        for (var i = 0; i < len; ++i) {
+            var key_name = string(names[i]);
+            if (key_name == "") {
+                continue;
+            }
+            clone[$ key_name] = true;
+        }
+        return clone;
+    };
+
+    var build_referenced_keys_meta = function(source_keys) {
+        var list = [];
+        if (is_struct(source_keys)) {
+            list = variable_struct_get_names(source_keys);
+        }
+        var lookup = clone_key_set(source_keys);
+        return { list: list, lookup: lookup };
+    };
+
     var generate_plan_struct = function(goal, actions, cost, meta) {
         var plan_struct = {
             goal: goal,
@@ -163,13 +189,26 @@ function Animus_Planner() constructor {
             return false;
         }
         var keys = [];
+        var key_lookup = undefined;
         if (variable_struct_exists(meta, "referenced_keys")) {
             var source = meta.referenced_keys;
             if (is_array(source)) {
                 keys = source;
             } else if (is_struct(source)) {
-                keys = variable_struct_get_names(source);
+                if (variable_struct_exists(source, "list") || variable_struct_exists(source, "lookup")) {
+                    if (variable_struct_exists(source, "list") && is_array(source.list)) {
+                        keys = source.list;
+                    }
+                    if (variable_struct_exists(source, "lookup") && is_struct(source.lookup)) {
+                        key_lookup = source.lookup;
+                    }
+                } else {
+                    key_lookup = source;
+                }
             }
+        }
+        if ((!is_array(keys) || array_length(keys) == 0) && is_struct(key_lookup)) {
+            keys = variable_struct_get_names(key_lookup);
         }
         var built_at_tick = variable_struct_exists(meta, "built_at_tick") ? meta.built_at_tick : -1;
         var len = array_length(keys);
@@ -178,10 +217,14 @@ function Animus_Planner() constructor {
             if (is_undefined(key)) {
                 continue;
             }
-            if (memory.is_dirty(key)) {
+            var key_name = string(key);
+            if (key_name == "") {
+                continue;
+            }
+            if (memory.is_dirty(key_name)) {
                 return false;
             }
-            if (memory.last_updated(key) > built_at_tick) {
+            if (memory.last_updated(key_name) > built_at_tick) {
                 return false;
             }
         }
@@ -418,18 +461,18 @@ function Animus_Planner() constructor {
             var goal = entry.goal;
 
             if (goal.matches_state(initial_state)) {
+                var referenced_meta = build_referenced_keys_meta(referenced_keys);
                 var meta = {
                     built_at_tick: memory_tick,
                     elapsed_ms: current_time - start_time,
                     nodes_expanded: 0,
                     nodes_generated: 0,
                     open_peak: 0,
-                    referenced_keys: variable_struct_get_names(referenced_keys),
+                    referenced_keys: referenced_meta,
                     is_partial: false,
                     budget: { nodes: config.max_expansions, ms: config.time_budget_ms },
                     reason: undefined
                 };
-                meta.referenced_keys = variable_struct_get_names(referenced_keys);
                 var empty_plan = generate_plan_struct(goal, [], 0, meta);
                 last_plan = empty_plan;
                 return empty_plan;
@@ -449,13 +492,14 @@ function Animus_Planner() constructor {
                 continue;
             }
 
+            var referenced_meta = build_referenced_keys_meta(referenced_keys);
             var meta = {
                 built_at_tick: memory_tick,
                 elapsed_ms: current_time - start_time,
                 nodes_expanded: search_result.nodes_expanded,
                 nodes_generated: search_result.nodes_generated,
                 open_peak: search_result.open_peak,
-                referenced_keys: variable_struct_get_names(referenced_keys),
+                referenced_keys: referenced_meta,
                 is_partial: search_result.is_partial,
                 budget: { nodes: config.max_expansions, ms: config.time_budget_ms },
                 reason: search_result.reason
