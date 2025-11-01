@@ -1,11 +1,34 @@
 meta:
   project: "Animus (GOAP-in-GML)"
+  created_at: "2025-11-01T16:30:51Z"
+  updated_at: "2025-11-01T16:32:02Z"
+  provenance:
+    - who: "Codex"
+      what: "initial-create"
+      when: "2025-11-01T16:30:51Z"
   helper_version: 1
   conventions:
     - "GML naming: variables snake_case, locals prefixed with _snake_case, constructors/functions PascalCase."
     - "Public APIs: Animus_* primaries; GOAP_* shims only where explicitly provided."
     - "Determinism: no wall clock or OS RNG in strategies; executor provides logical time + PRNG."
     - "Debug gates via #macro ANIMUS_DEBUG."
+  label_vocab:
+    - planner
+    - executor
+    - memory
+    - belief
+    - strategies
+    - debug
+    - docs
+    - samples
+    - performance
+    - determinism
+    - release
+    - project
+    - packaging
+    - testing
+    - safety
+    - devx
 workflow:
   unattended_task_policy:
     selection_order: ["priority", "dependencies_cleared", "id"]
@@ -15,11 +38,21 @@ workflow:
       - { from: "queued", to: "blocked" }
       - { from: "blocked", to: "queued" }
     execution_loop:
-      - "Select the first task with status=queued, all dependencies done/absent."
+      - "Select first queued task with all dependencies done."
+      - "Set status=in_progress immediately; write meta.updated_at."
       - "Implement code changes."
-      - "Update this file: set task status=in_progress during work, then done on completion."
-      - "Append a log entry with files touched, summary, and acceptance verification."
-      - "Stop after one task. Do not start the next task automatically."
+      - "Verify every acceptance bullet; if any fail, set status=blocked and add blocked_reason."
+      - "If all pass, set status=done."
+      - "Append a log entry (when/task_id/summary/files_touched/acceptance_verification)."
+      - "Commit using commit_message_template."
+      - "Stop after one task."
+    commit_message_template: |
+      chore(animus): {task_id} {title}
+
+      {summary}
+
+      Acceptance:
+      {acceptance_verification_bullets}
 tasks:
   # Array of task objects. Each:
   # - id: stable string (e.g., T01)
@@ -31,6 +64,8 @@ tasks:
   # - dependencies: [ids] (optional)
   # - labels: [strings] (e.g., ["planner","executor","docs"])
   # - anchors: optional hints to code locations or files
+  # Per-task optional fields (to be added only when relevant)
+  # blocked_reason: "Waiting for X"
   - id: T01
     title: "Repo hygiene & resource correctness"
     description: >
@@ -74,8 +109,8 @@ tasks:
     dependencies: ["T02"]
     labels: ["executor","strategies"]
     anchors:
-      - "Animus_StrategyTemplates.gml"
-      - "Animus_ActionStrategy.gml"
+      - "GOAP/scripts/Animus_StrategyTemplates/Animus_StrategyTemplates.gml"
+      - "GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml"
   - id: T04
     title: "Error surfaces (R2)"
     description: >
@@ -88,8 +123,8 @@ tasks:
     dependencies: ["T03"]
     labels: ["safety","devx"]
     anchors:
-      - "Animus_Executor.gml"
-      - "Animus_Core.gml"
+      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
+      - "GOAP/scripts/Animus_Core/Animus_Core.gml"
   - id: T05
     title: "Referenced-keys audit (S2)"
     description: >
@@ -103,8 +138,8 @@ tasks:
     dependencies: ["T03"]
     labels: ["planner","executor","performance"]
     anchors:
-      - "Animus_Planner.gml"
-      - "Animus_Executor.gml"
+      - "GOAP/scripts/Animus_Planner/Animus_Planner.gml"
+      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
   - id: T06
     title: "Partial-plan handoff (S1)"
     description: >
@@ -156,8 +191,8 @@ tasks:
     priority: 3
     labels: ["debug","tooling"]
     anchors:
-      - "Animus_Debug.gml"
-      - "Animus_Executor.gml"
+      - "GOAP/scripts/Animus_Debug/Animus_Debug.gml"
+      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
   - id: T10
     title: "Samples & docs"
     description: >
@@ -171,7 +206,8 @@ tasks:
     labels: ["docs","samples"]
     anchors:
       - "README.md"
-      - "samples/*"
+      - "samples/minimal/*"
+      - "samples/move/*"
   - id: T11
     title: "Performance & determinism checks"
     description: >
