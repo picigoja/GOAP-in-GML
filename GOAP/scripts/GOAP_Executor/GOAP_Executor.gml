@@ -15,6 +15,9 @@ function GOAP_Executor() constructor {
   plan_invalidated = false;       // sticky until cleared by agent
   on_plan_invalidated = undefined; // optional callback hook
   _last_invalidate_reason = undefined;
+  logical_time = 0;               // logical clock advanced exclusively by caller-provided dt
+  _rng_state = 0;                 // deterministic RNG state (uint32)
+  _rng_inited = false;            // RNG initialization flag
 
   // Sticky execution context (provided at start)
   _agent = undefined;
@@ -50,6 +53,7 @@ function GOAP_Executor() constructor {
     step_index = -1;
     active_strategy = undefined;
     elapsed_in_step = 0;
+    logical_time = 0;
     _set_status("starting");
 
     // Advance immediately to first action
@@ -72,6 +76,8 @@ function GOAP_Executor() constructor {
     if (status == "finished" || status == "failed" || status == "interrupted") {
       return status;
     }
+
+    logical_time += _dt;
 
     // Lazy-advance if we're between actions
     if (status == "starting" && is_undefined(active_strategy)) {
@@ -332,6 +338,8 @@ function GOAP_Executor() constructor {
 
   _make_context = function() {
     // Runtime context kept minimal and explicit
+    // Determinism hygiene: strategies must not read system clocks or global RNGs.
+    // Use the provided logical_time and rng_* helpers exclusively.
     var _ctx = {
       agent : _agent,
       world : _world,
@@ -339,8 +347,49 @@ function GOAP_Executor() constructor {
       memory : _memory,
       plan : plan_ref,
       step_index : step_index,
-      elapsed : elapsed_in_step
+      elapsed : elapsed_in_step,
+      logical_time : logical_time,
+      rng_float01 : method(self, rng_float01),
+      rng_int : method(self, rng_int),
+      rng_chance : method(self, rng_chance)
     };
     return _ctx;
+  };
+
+  // --- Deterministic RNG utilities ---
+
+  seed = function(_seed_val) {
+    _rng_state = _u32(_seed_val);
+    _rng_inited = true;
+  };
+
+  rng_float01 = function() {
+    if (!_rng_inited) {
+      seed(5489);
+    }
+    _rng_step();
+    // convert to [0,1)
+    return _rng_state / 4294967296.0;
+  };
+
+  rng_int = function(_min, _max) {
+    var _f = rng_float01();
+    return _min + floor(_f * (1 + _max - _min));
+  };
+
+  rng_chance = function(_p01) {
+    return rng_float01() < _p01;
+  };
+
+  _rng_step = function() {
+    var x = _rng_state;
+    x ^= (x << 13) & 0xffffffff;
+    x ^= (x >> 17) & 0xffffffff;
+    x ^= (x << 5) & 0xffffffff;
+    _rng_state = _u32(x);
+  };
+
+  _u32 = function(_v) {
+    return (_v & 0xffffffff);
   };
 }
