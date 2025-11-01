@@ -1,6 +1,19 @@
 /// @file GOAP_Executor.gml
 /// @desc Minimal runtime executor for GOAP plans. Calls ActionStrategy only.
 
+function ds_map_keys_like_struct(_s) {
+  var _arr = [];
+  if (is_undefined(_s)) {
+    return _arr;
+  }
+  var _it = variable_struct_get_names(_s);
+  var _len = array_length(_it);
+  for (var _i = 0; _i < _len; ++_i) {
+    array_push(_arr, _it[_i]);
+  }
+  return _arr;
+}
+
 function GOAP_Executor() constructor {
   // Internal state
   plan_ref = undefined;   // planner-returned plan object/struct
@@ -71,6 +84,29 @@ function GOAP_Executor() constructor {
     }
   };
 
+  var _clone_snapshot_value = function(_value) {
+    if (is_array(_value)) {
+      var _len = array_length(_value);
+      var _copy = array_create(_len);
+      for (var _i = 0; _i < _len; ++_i) {
+        _copy[_i] = _clone_snapshot_value(_value[_i]);
+      }
+      return _copy;
+    }
+    if (is_struct(_value)) {
+      var _clone = {};
+      var _keys = variable_struct_get_names(_value);
+      var _count = array_length(_keys);
+      for (var _j = 0; _j < _count; ++_j) {
+        var _key = _keys[_j];
+        var _val = variable_struct_get(_value, _key);
+        variable_struct_set(_clone, _key, _clone_snapshot_value(_val));
+      }
+      return _clone;
+    }
+    return _value;
+  };
+
   // --- Public API ---
 
   start = function(_plan, _agent_ref, _world_ref, _bb_ref, _mem_ref, _bus_opt) {
@@ -124,6 +160,419 @@ function GOAP_Executor() constructor {
       _set_status("finished");
     }
     return false;
+  };
+
+  snapshot = function() {
+    var _snap = {
+      step_index : step_index,
+      status : status,
+      elapsed_in_step : elapsed_in_step,
+      held_reservations : _clone_snapshot_value(held_reservations),
+      logical_time : logical_time,
+      rng_state : _rng_state,
+      rng_inited : _rng_inited,
+      plan_invalidated : plan_invalidated,
+      invalid_reason : _last_invalidate_reason,
+      plan_stale : _plan_stale,
+      relevant_keys : ds_map_keys_like_struct(_relevant_keys),
+      relevant_keys_defined : !is_undefined(_relevant_keys),
+      trace_count : _debug_count,
+      trace_head : _debug_head,
+      trace_buf : _clone_snapshot_value(_debug_buf),
+      expected_duration : _expected_duration
+    };
+
+    if (is_struct(plan_ref)) {
+      if (variable_struct_exists(plan_ref, "debug_json")) {
+        var _dbg_fn = plan_ref.debug_json;
+        if (is_method(_dbg_fn)) {
+          _snap.plan_debug = _dbg_fn();
+        } else if (is_function(_dbg_fn)) {
+          _snap.plan_debug = _dbg_fn();
+        }
+      }
+      if (variable_struct_exists(plan_ref, "cost")) {
+        _snap.plan_cost = plan_ref.cost;
+      }
+      if (variable_struct_exists(plan_ref, "meta")) {
+        _snap.plan_meta = _clone_snapshot_value(plan_ref.meta);
+      }
+    }
+
+    var _plan_actions = undefined;
+    if (is_struct(plan_ref) && variable_struct_exists(plan_ref, "actions")) {
+      _plan_actions = plan_ref.actions;
+    }
+
+    var _agent_actions = undefined;
+    if (is_struct(_agent) && variable_struct_exists(_agent, "actions")) {
+      _agent_actions = _agent.actions;
+    }
+
+    var _plan_goal = undefined;
+    if (is_struct(plan_ref) && variable_struct_exists(plan_ref, "goal")) {
+      _plan_goal = plan_ref.goal;
+    }
+
+    var _agent_goals = undefined;
+    if (is_struct(_agent) && variable_struct_exists(_agent, "goals")) {
+      _agent_goals = _agent.goals;
+    }
+
+    var _goal_index = undefined;
+    var _goal_name = undefined;
+    if (is_struct(_plan_goal)) {
+      if (variable_struct_exists(_plan_goal, "name")) {
+        _goal_name = _plan_goal.name;
+      }
+      if (is_array(_agent_goals)) {
+        var _glen = array_length(_agent_goals);
+        for (var _gi = 0; _gi < _glen; ++_gi) {
+          if (_agent_goals[_gi] == _plan_goal) {
+            _goal_index = _gi;
+            break;
+          }
+        }
+      }
+    }
+
+    _snap.plan_goal_index = _goal_index;
+    _snap.plan_goal_name = _goal_name;
+
+    var _indices = [];
+    var _names = [];
+    var _plan_len = 0;
+    if (is_array(_plan_actions)) {
+      _plan_len = array_length(_plan_actions);
+      for (var _ai = 0; _ai < _plan_len; ++_ai) {
+        var _act = _plan_actions[_ai];
+        var _idx = undefined;
+        if (is_array(_agent_actions)) {
+          var _agent_len = array_length(_agent_actions);
+          for (var _aj = 0; _aj < _agent_len; ++_aj) {
+            if (_agent_actions[_aj] == _act) {
+              _idx = _aj;
+              break;
+            }
+          }
+        }
+        array_push(_indices, _idx);
+        var _act_name = undefined;
+        if (is_struct(_act) && variable_struct_exists(_act, "name")) {
+          _act_name = _act.name;
+        }
+        array_push(_names, _act_name);
+      }
+    }
+
+    _snap.plan_action_indices = _indices;
+    _snap.plan_action_names = _names;
+    _snap.plan_length = _plan_len;
+
+    return _snap;
+  };
+
+  restore = function(_snap, _agent_ref, _world_ref, _bb_ref, _mem_ref, _bus_opt) {
+    if (!is_struct(_snap)) {
+      return false;
+    }
+
+    if (_mem_listener_attached) {
+      _detach_memory_listener();
+    }
+
+    plan_ref = undefined;
+    active_strategy = undefined;
+
+    _agent = _agent_ref;
+    _world = _world_ref;
+    _blackboard = _bb_ref;
+    _memory = _mem_ref;
+
+    reservation_bus = is_undefined(_bus_opt) ? (is_undefined(reservation_bus) ? {} : reservation_bus) : _bus_opt;
+    if (!is_struct(reservation_bus)) {
+      reservation_bus = {};
+    }
+
+    _owner_id = (is_struct(_agent) && variable_struct_exists(_agent, "id")) ? _agent.id : string(_agent);
+
+    var _agent_goals = undefined;
+    if (is_struct(_agent) && variable_struct_exists(_agent, "goals")) {
+      _agent_goals = _agent.goals;
+    }
+
+    var _plan_goal = undefined;
+    if (is_array(_agent_goals) && is_real(_snap.plan_goal_index)) {
+      var _goal_idx = floor(_snap.plan_goal_index);
+      if (_goal_idx >= 0 && _goal_idx < array_length(_agent_goals)) {
+        _plan_goal = _agent_goals[_goal_idx];
+      }
+    }
+    if (is_undefined(_plan_goal) && is_string(_snap.plan_goal_name) && is_array(_agent_goals)) {
+      var _goal_len = array_length(_agent_goals);
+      for (var _gi = 0; _gi < _goal_len; ++_gi) {
+        var _candidate_goal = _agent_goals[_gi];
+        if (is_struct(_candidate_goal) && variable_struct_exists(_candidate_goal, "name")) {
+          if (string(_candidate_goal.name) == string(_snap.plan_goal_name)) {
+            _plan_goal = _candidate_goal;
+            break;
+          }
+        }
+      }
+    }
+
+    var _agent_actions = undefined;
+    if (is_struct(_agent) && variable_struct_exists(_agent, "actions")) {
+      _agent_actions = _agent.actions;
+    }
+
+    var _restored_actions = [];
+    var _actions_missing = false;
+    var _snap_indices = is_array(_snap.plan_action_indices) ? _snap.plan_action_indices : [];
+    var _snap_names = is_array(_snap.plan_action_names) ? _snap.plan_action_names : [];
+    var _target_len = 0;
+    if (is_real(_snap.plan_length)) {
+      _target_len = max(0, floor(_snap.plan_length));
+    }
+    if (_target_len < array_length(_snap_indices)) {
+      _target_len = array_length(_snap_indices);
+    }
+    if (_target_len < array_length(_snap_names)) {
+      _target_len = array_length(_snap_names);
+    }
+
+    for (var _ai = 0; _ai < _target_len; ++_ai) {
+      var _resolved = undefined;
+      if (is_array(_agent_actions)) {
+        if (_ai < array_length(_snap_indices)) {
+          var _idx_val = _snap_indices[_ai];
+          if (is_real(_idx_val)) {
+            var _idx_int = floor(_idx_val);
+            if (_idx_int >= 0 && _idx_int < array_length(_agent_actions)) {
+              _resolved = _agent_actions[_idx_int];
+            }
+          }
+        }
+        if (is_undefined(_resolved) && _ai < array_length(_snap_names)) {
+          var _target_name = _snap_names[_ai];
+          if (!is_undefined(_target_name)) {
+            var _agent_len = array_length(_agent_actions);
+            for (var _aj = 0; _aj < _agent_len; ++_aj) {
+              var _candidate_action = _agent_actions[_aj];
+              var _candidate_name = undefined;
+              if (is_struct(_candidate_action) && variable_struct_exists(_candidate_action, "name")) {
+                _candidate_name = _candidate_action.name;
+              }
+              if (_candidate_name == _target_name) {
+                _resolved = _candidate_action;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (is_undefined(_resolved) && _target_len > 0) {
+        _actions_missing = true;
+        break;
+      }
+
+      array_push(_restored_actions, _resolved);
+    }
+
+    if (_actions_missing) {
+      _restored_actions = undefined;
+    } else if (is_array(_restored_actions)) {
+      var _restored_len = array_length(_restored_actions);
+      for (var _ck = 0; _ck < _restored_len; ++_ck) {
+        if (is_undefined(_restored_actions[_ck])) {
+          _restored_actions = undefined;
+          break;
+        }
+      }
+    }
+
+    if (is_array(_restored_actions)) {
+      var _plan_meta_struct = {};
+      if (is_struct(_snap.plan_meta)) {
+        _plan_meta_struct = _clone_snapshot_value(_snap.plan_meta);
+      }
+      var _plan_cost_value = _snap.plan_cost;
+      plan_ref = {
+        goal : _plan_goal,
+        actions : _restored_actions,
+        cost : _plan_cost_value,
+        meta : _plan_meta_struct
+      };
+      if (!is_real(plan_ref.cost)) {
+        plan_ref.cost = 0;
+      }
+      variable_struct_set(plan_ref, "__plan_debug_cache", _snap.plan_debug);
+      plan_ref.to_string = function() {
+        var _goal_ref = self.goal;
+        var _goal_name = (is_struct(_goal_ref) && variable_struct_exists(_goal_ref, "name")) ? string(_goal_ref.name) : "<goal>";
+        return "GOAP Plan for " + _goal_name + " with " + string(array_length(self.actions)) + " actions at cost " + string(self.cost);
+      };
+      plan_ref.debug_json = function() {
+        if (variable_struct_exists(self, "__plan_debug_cache") && !is_undefined(self.__plan_debug_cache)) {
+          return self.__plan_debug_cache;
+        }
+        return json_stringify({ goal: self.goal, actions: self.actions, cost: self.cost, meta: self.meta }, false);
+      };
+    } else {
+      var _planner = undefined;
+      if (is_struct(_agent) && variable_struct_exists(_agent, "planner")) {
+        _planner = _agent.planner;
+      }
+      if (!is_undefined(_planner) && variable_struct_exists(_planner, "plan")) {
+        var _plan_method = _planner.plan;
+        if (is_method(_plan_method)) {
+          var _goals_for_plan = undefined;
+          if (is_struct(_agent) && variable_struct_exists(_agent, "goals_to_check")) {
+            _goals_for_plan = _agent.goals_to_check;
+          }
+          if (!is_array(_goals_for_plan) && is_struct(_agent) && variable_struct_exists(_agent, "goals")) {
+            _goals_for_plan = _agent.goals;
+          }
+          var _last_goal_ref = undefined;
+          if (is_struct(_agent) && variable_struct_exists(_agent, "last_goal")) {
+            _last_goal_ref = _agent.last_goal;
+          }
+          var _new_plan = _plan_method(_agent, _goals_for_plan, _memory, _last_goal_ref);
+          if (is_struct(_new_plan)) {
+            plan_ref = _new_plan;
+          }
+        }
+      }
+    }
+
+    var _restored_status = "idle";
+    if (is_string(_snap.status)) {
+      _restored_status = _snap.status;
+    }
+
+    var _restored_step = -1;
+    if (is_real(_snap.step_index)) {
+      _restored_step = floor(_snap.step_index);
+    }
+    if (_restored_step < -1) {
+      _restored_step = -1;
+    }
+
+    var _plan_actions_valid = (is_struct(plan_ref) && variable_struct_exists(plan_ref, "actions") && is_array(plan_ref.actions));
+    if (_plan_actions_valid) {
+      var _len_actions = array_length(plan_ref.actions);
+      if (_len_actions <= 0) {
+        _restored_step = -1;
+      } else if (_restored_step >= _len_actions) {
+        _restored_step = _len_actions - 1;
+      }
+    } else {
+      if (_restored_status == "running" || _restored_status == "stopping" || _restored_status == "starting") {
+        _restored_status = "idle";
+      }
+      _restored_step = -1;
+    }
+
+    step_index = _restored_step;
+    status = _restored_status;
+
+    elapsed_in_step = is_real(_snap.elapsed_in_step) ? _snap.elapsed_in_step : 0;
+    logical_time = is_real(_snap.logical_time) ? _snap.logical_time : 0;
+    _rng_state = is_real(_snap.rng_state) ? _u32(_snap.rng_state) : 0;
+    _rng_inited = (_snap.rng_inited == true);
+
+    plan_invalidated = (_snap.plan_invalidated == true);
+    _last_invalidate_reason = _snap.invalid_reason;
+    _plan_stale = (_snap.plan_stale == true);
+
+    _expected_duration = _snap.expected_duration;
+
+    var _should_restore_keys = false;
+    if (variable_struct_exists(_snap, "relevant_keys_defined")) {
+      _should_restore_keys = (_snap.relevant_keys_defined == true);
+    } else {
+      if (is_array(_snap.relevant_keys) && array_length(_snap.relevant_keys) > 0) {
+        _should_restore_keys = true;
+      }
+    }
+
+    if (_should_restore_keys) {
+      _relevant_keys = {};
+      if (is_array(_snap.relevant_keys)) {
+        var _rk_len = array_length(_snap.relevant_keys);
+        for (var _rk = 0; _rk < _rk_len; ++_rk) {
+          var _rk_value = _snap.relevant_keys[_rk];
+          if (is_undefined(_rk_value)) {
+            continue;
+          }
+          var _rk_name = string(_rk_value);
+          if (_rk_name != "") {
+            _relevant_keys[$ _rk_name] = true;
+          }
+        }
+      }
+    } else {
+      _relevant_keys = undefined;
+    }
+
+    if (variable_struct_exists(_snap, "trace_buf") && !is_undefined(_snap.trace_buf)) {
+      _debug_buf = _clone_snapshot_value(_snap.trace_buf);
+      _debug_head = is_real(_snap.trace_head) ? floor(_snap.trace_head) : 0;
+      _debug_count = is_real(_snap.trace_count) ? floor(_snap.trace_count) : 0;
+      _debug_cap = array_length(_debug_buf);
+      if (_debug_cap <= 0) {
+        _debug_cap = 256;
+        _debug_buf = array_create(_debug_cap);
+        for (var _dbg_i = 0; _dbg_i < _debug_cap; ++_dbg_i) {
+          _debug_buf[_dbg_i] = { t: 0.0, ty: 0, a: 0, b: undefined };
+        }
+        _debug_head = 0;
+        _debug_count = 0;
+      }
+      if (_debug_count > _debug_cap) {
+        _debug_count = _debug_cap;
+      }
+      if (_debug_head < 0) {
+        _debug_head = (_debug_head mod _debug_cap + _debug_cap) mod _debug_cap;
+      }
+      if (_debug_head >= _debug_cap) {
+        _debug_head = _debug_head mod _debug_cap;
+      }
+    }
+
+    held_reservations = is_array(_snap.held_reservations) ? _clone_snapshot_value(_snap.held_reservations) : [];
+    if (!is_struct(reservation_bus)) {
+      reservation_bus = {};
+    }
+    if (!is_array(held_reservations)) {
+      held_reservations = [];
+    }
+    var _held_len = array_length(held_reservations);
+    for (var _hr = 0; _hr < _held_len; ++_hr) {
+      var _res_key = held_reservations[_hr];
+      if (!is_undefined(_res_key)) {
+        reservation_bus[$ _res_key] = _owner_id;
+      }
+    }
+
+    _mem_listener_attached = false;
+    _mem_listener_mode = undefined;
+    _ensure_memory_listener();
+
+    active_strategy = undefined;
+    var _has_actions = (is_struct(plan_ref) && variable_struct_exists(plan_ref, "actions") && is_array(plan_ref.actions));
+    if (_has_actions && step_index >= 0 && step_index < array_length(plan_ref.actions) && ((_restored_status == "running") || (_restored_status == "stopping"))) {
+      var _current_action = plan_ref.actions[step_index];
+      active_strategy = new GOAP_ActionStrategy(_current_action);
+      var _ctx_start = _make_context();
+      if (is_undefined(_expected_duration)) {
+        _expected_duration = active_strategy.get_expected_duration(_ctx_start);
+      }
+      active_strategy.start(_ctx_start);
+    }
+
+    return true;
   };
 
   tick = function(_dt) {
