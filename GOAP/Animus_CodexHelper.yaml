@@ -1,7 +1,7 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-01T16:41:56Z"
+  updated_at: "2025-11-01T18:21:06Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
@@ -9,6 +9,9 @@ meta:
     - who: "Codex"
       what: "merge-patch T02,T03,T04,T05,T09,T10,T12; normalize anchors; provenance update"
       when: "2025-11-01T16:41:56Z"
+    - who: Codex
+      what: 'merge-patch: add timestamps/provenance/vocab; harden loop; normalize anchors'
+      when: '2025-11-01T18:21:06Z'
   helper_version: 1
   conventions:
     - "GML naming: variables snake_case, locals prefixed with _snake_case, constructors/functions PascalCase."
@@ -32,6 +35,7 @@ meta:
     - testing
     - safety
     - devx
+    - api
 workflow:
   unattended_task_policy:
     selection_order: ["priority", "dependencies_cleared", "id"]
@@ -41,14 +45,14 @@ workflow:
       - {from: "queued", to: "blocked"}
       - {from: "blocked", to: "queued"}
     execution_loop:
-      - "Select first queued task with all dependencies done."
-      - "Set status=in_progress immediately; write meta.updated_at."
-      - "Implement code changes."
-      - "Verify every acceptance bullet; if any fail, set status=blocked and add blocked_reason."
-      - "If all pass, set status=done."
-      - "Append a log entry (when/task_id/summary/files_touched/acceptance_verification)."
-      - "Commit using commit_message_template."
-      - "Stop after one task."
+      - Select first task with status=queued and all dependencies done.
+      - Set status=in_progress immediately and write meta.updated_at.
+      - Implement code changes scoped to the task.
+      - Verify every acceptance bullet; if any fail, set status=blocked and provide blocked_reason.
+      - If all pass, set status=done.
+      - Append a log entry (when/task_id/summary/files_touched/acceptance_verification).
+      - Commit using commit_message_template.
+      - Stop after one task.
     commit_message_template: |
       chore(animus): {task_id} {title}
 
@@ -112,8 +116,8 @@ tasks:
     dependencies: ["T02"]
     labels: ["executor", "strategies"]
     anchors:
-      - "GOAP/scripts/Animus_StrategyTemplates/Animus_StrategyTemplates.gml"
-      - "GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml"
+      - GOAP/scripts/Animus_StrategyTemplates/Animus_StrategyTemplates.gml
+      - GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml
   - id: T04
     title: "Error surfaces (R2)"
     description: >
@@ -126,8 +130,8 @@ tasks:
     dependencies: ["T03"]
     labels: ["safety", "devx"]
     anchors:
-      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
-      - "GOAP/scripts/Animus_Core/Animus_Core.gml"
+      - GOAP/scripts/Animus_Executor/Animus_Executor.gml
+      - GOAP/scripts/Animus_Core/Animus_Core.gml
   - id: T05
     title: "Referenced-keys audit (S2)"
     description: >
@@ -141,8 +145,8 @@ tasks:
     dependencies: ["T03"]
     labels: ["planner", "executor", "performance"]
     anchors:
-      - "GOAP/scripts/Animus_Planner/Animus_Planner.gml"
-      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
+      - GOAP/scripts/Animus_Planner/Animus_Planner.gml
+      - GOAP/scripts/Animus_Executor/Animus_Executor.gml
   - id: T06
     title: "Partial-plan handoff (S1)"
     description: >
@@ -155,8 +159,8 @@ tasks:
     dependencies: ["T05"]
     labels: ["planner", "executor"]
     anchors:
-      - "Animus_Planner.gml"
-      - "Animus_Executor.gml"
+      - GOAP/scripts/Animus_Planner/Animus_Planner.gml
+      - GOAP/scripts/Animus_Executor/Animus_Executor.gml
   - id: T07
     title: "Serialization & snapshot hardening (Q8)"
     description: >
@@ -168,7 +172,7 @@ tasks:
     priority: 2
     labels: ["executor", "persistence", "testing"]
     anchors:
-      - "Animus_Executor.gml"
+      - GOAP/scripts/Animus_Executor/Animus_Executor.gml
   - id: T08
     title: "Memory contract: debounce & metadata clarity"
     description: >
@@ -181,8 +185,8 @@ tasks:
     priority: 3
     labels: ["memory", "belief", "testing"]
     anchors:
-      - "Animus_Belief.gml"
-      - "Animus_Memory.gml"
+      - GOAP/scripts/Animus_Belief/Animus_Belief.gml
+      - GOAP/scripts/Animus_Memory/Animus_Memory.gml
   - id: T09
     title: "Tooling polish: one true debug story"
     description: >
@@ -194,8 +198,8 @@ tasks:
     priority: 3
     labels: ["debug", "tooling"]
     anchors:
-      - "GOAP/scripts/Animus_Debug/Animus_Debug.gml"
-      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
+      - GOAP/scripts/Animus_Debug/Animus_Debug.gml
+      - GOAP/scripts/Animus_Executor/Animus_Executor.gml
   - id: T10
     title: "Samples & docs"
     description: >
@@ -208,9 +212,9 @@ tasks:
     priority: 3
     labels: ["docs", "samples"]
     anchors:
-      - "README.md"
-      - "samples/minimal/*"
-      - "samples/move/*"
+      - README.md
+      - samples/minimal/*
+      - samples/move/*
   - id: T11
     title: "Performance & determinism checks"
     description: >
