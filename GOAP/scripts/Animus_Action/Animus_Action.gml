@@ -10,6 +10,7 @@ function Animus_Action(name, preconditions, effects, cost) constructor {
     component_id = identity.component_id;
     component_name = identity.component_name;
 
+        // CHORE: test strategy change — noop comment added to trigger CI suggestions
     is_equal = function(other) {
         return identity.is_equal(other);
     };
