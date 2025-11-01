@@ -22,6 +22,7 @@
     {"id":{"name":"GOAP_Action","path":"scripts/GOAP_Action/GOAP_Action.yy",},},
     {"id":{"name":"GOAP_ActionPlan","path":"scripts/GOAP_ActionPlan/GOAP_ActionPlan.yy",},},
     {"id":{"name":"GOAP_ActionStrategy","path":"scripts/GOAP_ActionStrategy/GOAP_ActionStrategy.yy",},},
+    {"id":{"name":"GOAP_Executor","path":"scripts/GOAP_Executor/GOAP_Executor.yy",},},
     {"id":{"name":"GOAP_Agent","path":"scripts/GOAP_Agent/GOAP_Agent.yy",},},
     {"id":{"name":"GOAP_Belief","path":"scripts/GOAP_Belief/GOAP_Belief.yy",},},
     {"id":{"name":"GOAP_Component","path":"scripts/GOAP_Component/GOAP_Component.yy",},},
