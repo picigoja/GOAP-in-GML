@@ -31,11 +31,42 @@ function GOAP_Executor() constructor {
   _plan_stale = false;
   _relevant_keys = undefined;
 
+  // Debug trace ring buffer (fixed capacity)
+  _debug_cap = 256;
+  _debug_buf = array_create(_debug_cap);
+  _debug_head = 0;
+  _debug_count = 0;
+  _debug_enabled = true;
+
+  const _DBG_T_TRANSITION = 0;
+  const _DBG_T_ACTION_STEP = 1;
+  const _DBG_T_INVARIANT_FAIL = 2;
+  const _DBG_T_RESERVATION = 3;
+  const _DBG_T_TIMEOUT = 4;
+
+  for (var _dbg_i = 0; _dbg_i < _debug_cap; ++_dbg_i) {
+    _debug_buf[_dbg_i] = { t: 0.0, ty: 0, a: 0, b: undefined };
+  }
+
+  _trace = function(_ty, _a, _b) {
+    if (!_debug_enabled) return;
+    var _entry = _debug_buf[_debug_head];
+    _entry.t = logical_time;
+    _entry.ty = _ty;
+    _entry.a = _a;
+    _entry.b = _b;
+    _debug_head = (_debug_head + 1) mod _debug_cap;
+    if (_debug_count < _debug_cap) {
+      _debug_count += 1;
+    }
+  };
+
   _set_status = function(_new) {
     if (status != _new) {
       #if DEBUG
       show_debug_message("[GOAP_Executor] " + string(status) + " -> " + string(_new));
       #endif
+      _trace(_DBG_T_TRANSITION, step_index, string(status) + "->" + string(_new));
       status = _new;
     }
   };
@@ -130,6 +161,18 @@ function GOAP_Executor() constructor {
 
       var _ok = active_strategy.invariant_check(_ctx);
       if (is_undefined(_ok) || !_ok) {
+        var _inv_key = undefined;
+        if (variable_struct_exists(active_strategy, "get_last_invariant_key")) {
+          if (is_method(active_strategy, "get_last_invariant_key")) {
+            _inv_key = active_strategy.get_last_invariant_key();
+          } else {
+            var _inv_fn = active_strategy.get_last_invariant_key;
+            if (is_function(_inv_fn)) {
+              _inv_key = _inv_fn();
+            }
+          }
+        }
+        _trace(_DBG_T_INVARIANT_FAIL, step_index, _inv_key);
         _set_status("stopping");
         active_strategy.stop(_ctx, "invariant_fail");
         _release_reservations();
@@ -144,6 +187,14 @@ function GOAP_Executor() constructor {
       _ctx = _make_context();
 
       if (!is_undefined(_expected_duration) && is_real(_expected_duration) && elapsed_in_step > _expected_duration) {
+        var _timeout_action = current_action();
+        var _timeout_name = undefined;
+        if (is_struct(_timeout_action) && variable_struct_exists(_timeout_action, "name")) {
+          _timeout_name = _timeout_action.name;
+        } else {
+          _timeout_name = "action@" + string(step_index);
+        }
+        _trace(_DBG_T_TIMEOUT, step_index, _timeout_name);
         _set_status("stopping");
         active_strategy.stop(_ctx, "timeout");
         _release_reservations();
@@ -253,6 +304,76 @@ function GOAP_Executor() constructor {
     return _actions[step_index];
   };
 
+  debug_trace_count = function() {
+    return _debug_count;
+  };
+
+  debug_trace_capacity = function() {
+    return _debug_cap;
+  };
+
+  debug_json = function() {
+    var _out = {
+      status : status,
+      step_index : step_index,
+      logical_time : logical_time,
+      trace : []
+    };
+
+    var _n = _debug_count;
+    var _start = (_debug_head - _n + _debug_cap) mod _debug_cap;
+    for (var _i = 0; _i < _n; ++_i) {
+      var _idx = (_start + _i) mod _debug_cap;
+      var _entry = _debug_buf[_idx];
+      array_push(_out.trace, {
+        t : _entry.t,
+        ty : _entry.ty,
+        a : _entry.a,
+        b : _entry.b
+      });
+    }
+    return _out;
+  };
+
+  playback_to_string = function(_plan_opt) {
+    var _s = "";
+    var _plan_string = undefined;
+    if (!is_undefined(_plan_opt) && is_struct(_plan_opt) && variable_struct_exists(_plan_opt, "to_string")) {
+      if (is_method(_plan_opt, "to_string")) {
+        _plan_string = _plan_opt.to_string();
+      } else {
+        var _to_string_fn = _plan_opt.to_string;
+        if (is_function(_to_string_fn)) {
+          _plan_string = _to_string_fn();
+        }
+      }
+    }
+
+    if (!is_undefined(_plan_string)) {
+      _s += "[PLAN]\n" + _plan_string + "\n";
+    }
+
+    _s += "[TRACE]\n";
+    var _n = _debug_count;
+    var _start = (_debug_head - _n + _debug_cap) mod _debug_cap;
+
+    for (var _j = 0; _j < _n; ++_j) {
+      var _idx = (_start + _j) mod _debug_cap;
+      var _e = _debug_buf[_idx];
+      var _tag = "";
+      switch (_e.ty) {
+        case _DBG_T_TRANSITION:     _tag = "TRANS"; break;
+        case _DBG_T_ACTION_STEP:    _tag = "STEP"; break;
+        case _DBG_T_INVARIANT_FAIL: _tag = "INV!"; break;
+        case _DBG_T_RESERVATION:    _tag = "RSRV"; break;
+        case _DBG_T_TIMEOUT:        _tag = "TIME"; break;
+        default:                    _tag = "????"; break;
+      }
+      _s += string_format(_e.t, 0, 3) + " | " + _tag + " | a=" + string(_e.a) + " | b=" + string(_e.b) + "\n";
+    }
+    return _s;
+  };
+
   interrupt = function(_reason) {
     var _ctx = _make_context();
     if (!is_undefined(active_strategy)) {
@@ -303,12 +424,19 @@ function GOAP_Executor() constructor {
     }
 
     var _action = _actions[step_index];
+    var _dbg_name = undefined;
+    if (is_struct(_action) && variable_struct_exists(_action, "name")) {
+      _dbg_name = _action.name;
+    } else {
+      _dbg_name = "action@" + string(step_index);
+    }
 
     // Instantiate per-action runtime adapter
     active_strategy = new GOAP_ActionStrategy(_action);
     elapsed_in_step = 0;
     held_reservations = [];
     _expected_duration = undefined;
+    _trace(_DBG_T_ACTION_STEP, step_index, _dbg_name);
 
     var _ctx = _make_context();
 
@@ -328,6 +456,7 @@ function GOAP_Executor() constructor {
       if (variable_struct_exists(reservation_bus, _key)) {
         var _owner = reservation_bus[$ _key];
         if (_owner != _owner_id) {
+          _trace(_DBG_T_RESERVATION, step_index, string(_key));
           active_strategy = undefined;
           _release_reservations();
           _set_status("stopping");
