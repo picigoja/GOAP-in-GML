@@ -3,7 +3,7 @@
 
 /// Common helper to bind the action and return a Strategy-shaped struct
 function _MakeBaseStrategy(_action_ref) {
-    var _S = new GOAP_ActionStrategy(_action_ref); // keeps shape & defaults
+    var _S = new Animus_ActionStrategy(_action_ref); // keeps shape & defaults
     // Ensure all required fns exist, even if overridden later
     if (!is_callable(_S.start))                  _S.start                  = function(_) {};
     if (!is_callable(_S.update))                 _S.update                 = function(_, __) { return "running"; };

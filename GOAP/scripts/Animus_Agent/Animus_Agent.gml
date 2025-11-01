@@ -1,19 +1,19 @@
-function GOAP_Agent() constructor {
+function Animus_Agent() constructor {
   // Identity
   name = "Agent";
 
   // Core references
-  planner = undefined;           // GOAP_Planner
-  memory = undefined;            // GOAP_Memory
-  executor = undefined;          // GOAP_Executor (optional; not used here)
+  planner = undefined;           // Animus_Planner
+  memory = undefined;            // Animus_Memory
+  executor = undefined;          // Animus_Executor (optional; not used here)
   world = undefined;             // external world reference
   blackboard = undefined;        // shared blackboard
   reservation_bus = undefined;   // shared reservation coordination map
   sensor_hub = undefined;
 
   // Agent knowledge
-  beliefs = [];                  // array or map of GOAP_Belief
-  goals = [];                    // array of GOAP_Goal
+  beliefs = [];                  // array or map of Animus_Belief
+  goals = [];                    // array of Animus_Goal
   goals_to_check = [];           // alias for planner signature compatibility
   actions = [];                  // optional: catalog for UI/debug only
 
@@ -46,12 +46,9 @@ function GOAP_Agent() constructor {
     if (argument_count > 3) { world = _world_optional; }
     if (argument_count > 4) { blackboard = _blackboard_optional; }
     if (is_undefined(sensor_hub)) {
-      sensor_hub = new GOAP_SensorHub(self, world, blackboard, memory);
+      sensor_hub = new Animus_SensorHub(self, world, blackboard, memory);
     } else {
-      sensor_hub._agent = self;
-      sensor_hub._world = world;
-      sensor_hub._blackboard = blackboard;
-      sensor_hub._memory = memory;
+      sensor_hub.configure(self, world, blackboard, memory);
     }
     return self;
   };
@@ -79,7 +76,13 @@ function GOAP_Agent() constructor {
       var _len = array_length(beliefs);
       for (var _i = 0; _i < _len; ++_i) {
         var _b = beliefs[_i];
-        if (is_method(_b, bind_to_memory)) { _b.bind_to_memory(memory); }
+        if (is_struct(_b)) {
+          if (Animus_Core.is_callable(_b.bind)) {
+            _b.bind(memory);
+          } else if (Animus_Core.is_callable(_b.bind_to_memory)) {
+            _b.bind_to_memory(memory);
+          }
+        }
       }
       return;
     }
@@ -89,7 +92,13 @@ function GOAP_Agent() constructor {
       for (var _j = 0; _j < _klen; ++_j) {
         var _bk = _keys[_j];
         var _b2 = variable_struct_get(beliefs, _bk);
-        if (is_method(_b2, bind_to_memory)) { _b2.bind_to_memory(memory); }
+        if (is_struct(_b2)) {
+          if (Animus_Core.is_callable(_b2.bind)) {
+            _b2.bind(memory);
+          } else if (Animus_Core.is_callable(_b2.bind_to_memory)) {
+            _b2.bind_to_memory(memory);
+          }
+        }
       }
     }
   };
@@ -144,7 +153,7 @@ function GOAP_Agent() constructor {
 
     // Ensure executor exists
     if (is_undefined(executor)) {
-      executor = new GOAP_Executor();
+      executor = new Animus_Executor();
     }
 
     if (is_undefined(reservation_bus)) {
@@ -210,4 +219,10 @@ function GOAP_Agent() constructor {
 
     return _plan;
   };
+}
+
+/// @desc Backward compatible constructor alias.
+/// @returns {Animus_Agent}
+function GOAP_Agent() constructor {
+  return Animus_Agent();
 }

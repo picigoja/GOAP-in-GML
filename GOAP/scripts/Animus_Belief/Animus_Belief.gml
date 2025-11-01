@@ -156,10 +156,23 @@ function Animus_Belief(name, config, evaluator) constructor {
         memory_source = memory;
     };
 
+    /// @desc Backward compatible alias for bind(memory).
+    /// @param {Animus_Memory} memory
+    /// @returns {Void}
+    bind_to_memory = function(memory) {
+        bind(memory);
+    };
+
     /// @desc Unbinds the belief from its memory source.
     /// @returns {Void}
     unbind = function() {
         memory_source = undefined;
+    };
+
+    /// @desc Backward compatible alias for unbind().
+    /// @returns {Void}
+    unbind_from_memory = function() {
+        unbind();
     };
 
     /// @desc Evaluates the belief immediately against the provided memory (or bound memory).

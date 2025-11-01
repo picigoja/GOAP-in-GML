@@ -1,189 +1,159 @@
-# GOAP-in-GML
-Goal Oriented Action Planning system in GameMaker
-git-amend's GOAP System originaly wirtten in C# for Unity reworked for GML by picigoja
-git-amend's implementation: [Better AI in Unity - GOAP (Goal Oriented Action Planning)](https:youtu.be/T_sBYgP7_2k?si=J_V58RjAPR-CwhQ-)
+# Animus (GOAP in GML)
 
-### What is it:
-A Goal Oriented Action Planning system for creating more complex NPC behaviours than what State Machines or Behaviour Trees could manage
+Animus is a modular Goal Oriented Action Planning (GOAP) toolkit for GameMaker. It focuses on clean separation between declarative planning data (beliefs, goals, actions) and the runtime systems that execute the chosen plan (strategies, sensors, reservations). The project started as a port of git-amend’s Unity sample, but has evolved into a purpose-built GML framework with deterministic planning, plan reuse, and tooling for debugging agent behaviour.
 
-### How it works:
-Define Beliefs, Actions and Goals to the Agent. The Agent will take all of its Goals and sort out the ones that have any Beliefs among its Desired Effects whose evaluators resolve to true.
+Animus ships with compatibility aliases (`GOAP_*`) so existing prototypes continue to compile, but new work should use the `Animus_*` APIs shown below.
 
-e.g.: Let's make a Goal "Do not die of hunger" and a Belief as its Desired Effect "Am I hungry?" for the Agent "Agent NPC Worker". 
-When the Belief "Am I hungry?" 's Condition evaluates, then that would signal the Agent that the Goal "Do not die of hunger" became 
-relevant and in the next planning phase it should include this Goal with its priority among the other Goals that have one or more evaluating Desired Effects
+## Core Scripts
+- `Animus_Core` – logging, assertions, helpers
+- `Animus_Predicate` – canonical predicate representation (+ apply/evaluate helpers)
+- `Animus_Belief` – declarative world state probes with optional memory binding
+- `Animus_Goal` – desired world states and priority/evaluation hooks
+- `Animus_Action` – planning records (preconditions, effects, dynamic costs)
+- `Animus_Planner` – A* search with partial-plan support and reuse policy
+- `Animus_Memory` – authoritative state store with dirty tracking & subscriptions
+- `Animus_Executor` – runtime plan executor with reservations, tracing, and deterministic RNG
+- `Animus_ActionStrategy` – interface between executor and gameplay logic
+- `Animus_Sensor` / `Animus_SensorHub` – periodic sampling pipeline feeding memory
+- `Animus_RunState` – shared status constants
+- `Animus_Plan`, `Animus_Debug`, `Animus_StrategyTemplates` – plan wrappers, inspection helpers, and ready-made strategy patterns
 
-The Agent prioritizes the Goals that had any Desired Effects evaluating, selects the one with highest Priority, gets all the Actions
-and matches each Action's Effects to the selected Goal's Desired Effects building a stack of Actions, each solving a part of Beliefs left
-from previous Actions Preconditions and from (yet unsolved) Desired Effects from the selected Goal itself.
-Note that the Agent searches backwards from Desired Effects, chaining Actions until all Preconditions are satisfied.
+## Quickstart
+```gml
+// Create shared state
+memory = new Animus_Memory();
+memory.write("agent.hunger", 75);
+memory.write("agent.food_inventory", 0);
 
-e.g.: from goals = [ Goal_1("Do not die of hunger", Desired Effects = ["Am I hungry?"], priority = 2), Goal_2("Do nothing", Desired Effects = [TRUE], priority = 1) ] 
-the Agent would select Goal_1 as it's next Goal when its Desired Effect "Am I hungry?" is TRUE else the next Goal would be Goal_2 since Goal_1's priority is higher.
-and from actions = [ Action_1("Eat",      Preconditions = ["Backpack contains food item?"], Effets = ["Am I hungry?"]), 
-             Action_2("Get Food", Preconditions = [],                               Effets = ["Backpack contains food item?"])) ];
-would link Action_1 and Action_2 after each other as a solution to Goal_1. 
-
-After discovering every possible combination, the Agent chooses the cheapest stack and starts executing the last Action going backwards.
-
-## Basic Components:
-
-### Beliefs:
-Beliefs are information about the World State. Create one by calling `new GOAP_Belief()`.
-
-e.g.:
-var _belief = new GOAP_Belief("Example Belief");
-
-The Belief's name should help you identify the Belief and helps in planning connections with other Components. e.g.: `_belief.name = "Am I hungry?"`.
-
-Every belief owns an evaluator that decides if the world state currently satisfies the belief. Evaluators can run against cached
-values, arbitrary structs, or the shared `GOAP_Memory` component. The most common way to configure a belief is by supplying a
-memory key and (optionally) a custom evaluator:
-
-```
-var _belief = new GOAP_Belief("Am I hungry?", {
-    memory_key: "hunger",
-    evaluator: function(_value) {
-        return _value >= NPC_CRITICAL_HUNGER_LEVEL;
-    },
+// Beliefs describe the world through Animus_Memory
+var belief_hungry = new Animus_Belief("agent.hungry", {
+    memory_key: "agent.hunger",
+    evaluator: function(value) { return value >= NPC_CRITICAL_HUNGER; },
     default_value: 0,
 });
-```
 
-Passing a struct is the preferred approach, but strings and reals are treated as memory keys for convenience. You may also provide
-custom selector/evaluator pairs for advanced scenarios where the value should be derived from something other than a single memory key.
+var belief_has_food = new Animus_Belief("agent.has_food", {
+    memory_key: "agent.food_inventory",
+    evaluator: function(value) { return value > 0; },
+});
 
-It's Location is a Vector2 with an "x" and a "y" component, use as World coordinate to tie this Belief to a specific location.
+var beliefs = [belief_hungry, belief_has_food];
 
-Populate an Array with all your Beliefs and feed it to the Agent as initial Beliefs.
+// Actions change the world state
+var action_get_food = new Animus_Action(
+    "Get Food",
+    [],
+    [ ["agent.has_food", true] ],
+    2
+);
 
-```
-var _beliefs = [
-    new GOAP_Belief("Am I hungry?", {
-        memory_key: "hunger",
-        evaluator: function(_value) { return _value >= NPC_CRITICAL_HUNGER_LEVEL; },
-    }),
-    new GOAP_Belief("Backpack contains food item?", {
-        memory_key: "backpack_food",
-        evaluator: function(_value) { return _value > 0; },
-    }),
-    // TODO Give example for Location
-];
-```
-
-Other Components will refere to Your Beliefs according to the connections between them, defined later in Actions and Goals.
-
-### Actions:
-Actions are the way the Agent will change the World State. Create one by calling "new AgentAction()".
-
-e.g.:
-var _action = new AgentAction();
-
-The Action's name should help you identify the Action.
-
-e.g.: 
-_action.name = "Eat";
-
-This is how you define connections between Actions and Beliefs:
-The Action's Preconditions are Beliefs in an Array but the AgentAction constructor expects 
-_initial_preconditions Array of name strings and these name strings should match your Beliefs names. 
-
-e.g.: 
-_action.preconditions = ["Backpack contains food item?"];
-
-and it's Effects are also Beliefs in an Array and again the AgentAction constructor expects 
-_initial_effects Array of name strings and these name strings should match your Beliefs names. 
-
-e.g.: 
-_action.effects = ["Am I hungry?"];
-
-Then the Agent in its start() method will match these name strings to your Beliefs and link the Belief to the Action thus creating connections between them.
-
-With the Action's Cost parameter you can fine tune how the Agent will sort your Actions.
-
-ActionStrategy:
-Each Action has a Strategy and each Strategy has three method
-start(), update(), and stop().
-and two properties 
-"is_complete" and "can_perform"
-for you to implement. Note that you must set can_perform = true when the Action is available, otherwise the Agent will skip it.
-You can use these methods to write your gameplay logic for your Actions and the Agent checks the 
-properties whether the Action's Strategy is completed or not or can even perform in the first place?
-
-e.g.:
-_action.strategy.update = function() {
-    npc.backpack.take_item_amount(food_item, 1);
-    npc.set_hunger_level(NPC_HUNGER_LEVEL_MAX);
-    is_complete = true;
-}
-
-TODO Give example for other methods and can_perform
-  
-Populate an Array with all your Actions and feed it to the Agent as initial Actions.
-
-e.g.:
-var _actions = [];
-
-var _action = new AgentAction("Eat", ["Backpack contains food item?"], ["Am I hungry?"], ACTION_COST_LOW);
-_action.strategy.update = function() {
-npc.backpack.take_item_amount(food_item, 1);
-npc.set_hunger_level(NPC_HUNGER_LEVEL_MAX);
-is_complete = true;
+// The executor asks each action for a runtime strategy. You can return one of the templates.
+action_get_food.build_strategy = function(ctx, action) {
+    return Strategy_Timed(action, {
+        target_s: 1.5,
+        on_success: function(context) {
+            context.memory.write("agent.food_inventory", 1, "ai", 1);
+        }
+    });
 };
 
-var _action_1 = new AgentAction( ... );
+var action_eat = new Animus_Action(
+    "Eat",
+    [ ["agent.has_food", true] ],
+    [ ["agent.hungry", false] ],
+    function(state) { return (state["agent.hungry"] + 1); }
+);
 
-...
+action_eat.build_strategy = function(ctx, action) {
+    return Strategy_Instant(action, {
+        on_success: function(context) {
+            var mem = context.memory;
+            mem.write("agent.hunger", 0, { source: "ai", confidence: 1 });
+            mem.write("agent.food_inventory", max(0, mem.read("agent.food_inventory", 0) - 1));
+        }
+    });
+};
 
-array_push(_actions, _action, _action_1, ... );
+var actions = [action_get_food, action_eat];
 
-### Goals:
-Goals are a collection of Beliefs thats Conditions are desired to evaluate to TRUE. Create one by calling "new AgentGoal()".
+// Goals describe what we want
+var goal_survive = new Animus_Goal(
+    "Avoid Starvation",
+    [ ["agent.hungry", false] ],
+    function(mem) { return mem.read("agent.hungry", 0); }
+);
 
-e.g.: 
-var _goal = new AgentGoal();
+var goals = [goal_survive];
 
-The Goal's name should help you identify the Goal.
+// Wire everything into an agent
+planner = new Animus_Planner();
+executor = new Animus_Executor();
+agent = new Animus_Agent();
 
-e.g.: 
-_goal.name = "Do not die of hunger";
+agent.bind(planner, memory, executor);      // optional world/blackboard params available
+agent.set_beliefs(beliefs);
+agent.set_actions(actions);
+agent.set_goals(goals);
+agent.bind_beliefs_to_memory();
 
-This is how you define connections between Goals and Beliefs:
-The Goal's Desired Effects are Beliefs in an Array but the AgentGoal constructor expects 
-_initial_desired_effects Array of name strings and these name strings should match your Beliefs names.
-Note that Desired Effects represent world states the Agent wants to achieve, not conditions that are currently true.
+// In Step (or a dedicated AI controller)
+agent.tick(_dt); // handles perception, planning, execution
+```
 
-e.g.: 
-_goal.initial_desired_effects = ["Am I hungry?"];
+### Predicates & Effects
+`Animus_Predicate.normalize_list` accepts strings, arrays, or structs:
+- `"agent.hungry"` → `{ key:"agent.hungry", op:"eq", value:true }`
+- `"!agent.hungry"` → `{ key:"agent.hungry", op:"eq", value:false }`
+- `[ "agent.hunger", 50, "gt" ]` → `{ key:"agent.hunger", op:"gt", value:50 }`
 
-Then the Agent in its start() method will match these name strings to your Beliefs and link the Belief to the Goal thus creating connections between them.
+Effects support the same shapes; using `"!key"` or `{ unset:true }` clears a fact from the state.
 
-With the Goal's priority parameter you can fine tune how the Agent will sort your Goals.
+### Memory helpers
+- `memory.write(key, value, source_or_options?, confidence?)` wraps `set(...)`
+- `memory.read(key, default)` wraps `get(...)`
+- `memory.snapshot(include_metadata)` returns a deep copy of known keys (with or without metadata)
+- Dirty tracking (`is_dirty`, `last_updated`) allows the planner to invalidate stale plans quickly.
 
-Populate an Array with all your Goals and feed it to the Agent as initial Goals.
+### Strategies & Execution
+The executor instantiates a strategy per plan step using the following rules:
+1. If an action exposes `strategy` as a struct, that struct is used directly.
+2. If an action exposes `build_strategy`, `create_strategy`, `strategy_factory`, `make_strategy`, or `strategy_builder`, the callable is invoked as `fn(context, action)`.
+3. If none of the above exist, a default `Animus_ActionStrategy` instance is created.
 
-e.g.:
-var _goals = [];
-var _goal = new AgentGoal("Do not die of hunger", ["Am I hungry?"], GOAL_PRIORITY_HIGH);
-var _goal_1 = new AgentGoal( ... );
-...
-array_push(_goals, _goal, _goal_1, ... );
+Each strategy must implement (or inherit) the following methods:
+- `start(context)` – called once when the action becomes active.
+- `update(context, dt)` – returns one of `Animus_RunState` constants.
+- `stop(context, reason)` – cleanup for completion, interruption, or failure.
+- `invariant_check(context)` – return `false` to invalidate the current plan early.
+- `get_expected_duration(context)` – optional duration hint for timeouts.
+- `get_reservation_keys(context)` – optional set of resource keys for conflict handling.
+- `get_last_invariant_key()` – optional human-readable debug hint.
 
-TODO Sensors
+`Animus_StrategyTemplates.gml` contains ready-made helpers such as `Strategy_Instant`, `Strategy_Timed`, and `Strategy_Move` that return fully shaped strategies on top of the new interface.
 
-### Agent:
-The Agent is the main component that hold Beliefs, Actions and Goals. Create one and give it a name by calling "new GoapAgent(_name)".
-and give the Agent initial Beliefs, Actions and Goals described above.
+### Sensors & Perception
+`Animus_Sensor` defines a simple base class with interval-aware sampling. The hub stores optional references (`agent`, `world`, `blackboard`, `memory`) and can be driven in two ways:
+```gml
+// Perception tick inside Animus_Agent.tick already calls this:
+sensor_hub.tick(_dt);             // uses bound memory
+// Legacy usage still supported:
+sensor_hub.tick(memory, _dt);     // overrides the memory for this call
+```
+Add sensors with `sensor_hub.add_sensor(sensor)`. Each sensor receives the memory instance in `tick(memory, dt)` and should call `memory.write(...)` with new observations.
 
-e.g.: 
--- obj_npc Create event --
-agent = new GoapAgent("Agent NPC Worker", _beliefs, _actions, _goals);
+### Plan Inspection
+- `Animus_Debug.dump_plan(plan)` → human-readable description
+- `executor.debug_json()` → serialisable trace for tooling
+- `executor.playback_to_string(plan)` → merged plan + trace log
 
-Call the Agent's methods at the right event.
+### Compatibility Notes
+- Existing code that references `GOAP_*` constructors will continue to work; each now forwards to its `Animus_*` counterpart.
+- New code should adopt the Animus naming to avoid future removals of legacy aliases.
+- Strategy shape changed: implement `stop`, `invariant_check`, `get_expected_duration`, and `get_reservation_keys` (templates updated accordingly).
+- `Animus_Memory` gained `read`, `write`, and `snapshot` helpers; agent and executor now rely on them.
 
-agent.start();
-
--- obj_npc Step event --
-agent.update();
-
-and let the Agent do it's thing
+## Next Steps
+- Review the sample strategy templates and adapt them to your gameplay needs.
+- Use `reservation_bus` (provided during execution) to coordinate multi-agent resource access.
+- Extend the sensor hub with domain sensors (LOS probes, blackboard synchronisers, etc.).
+- Hook `Animus_Debug` helpers into your tooling UI or in-game debug overlays.

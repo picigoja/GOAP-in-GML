@@ -116,6 +116,56 @@ function GOAP_Executor() constructor {
     return true;
   };
 
+  var _resolve_strategy_factory = function(_action) {
+    if (!is_struct(_action)) {
+      return undefined;
+    }
+    var _candidates = ["build_strategy", "create_strategy", "strategy_factory", "make_strategy", "strategy_builder"];
+    for (var _ci = 0; _ci < array_length(_candidates); ++_ci) {
+      var _prop = _candidates[_ci];
+      if (variable_struct_exists(_action, _prop)) {
+        var _fn = variable_struct_get(_action, _prop);
+        if (Animus_Core.is_callable(_fn)) {
+          return _fn;
+        }
+      }
+    }
+    if (variable_struct_exists(_action, "strategy")) {
+      var _candidate = variable_struct_get(_action, "strategy");
+      if (Animus_Core.is_callable(_candidate)) {
+        return _candidate;
+      }
+    }
+    return undefined;
+  };
+
+  var _resolve_strategy_instance = function(_action, _ctx_preview) {
+    if (!is_struct(_action)) {
+      return undefined;
+    }
+    if (variable_struct_exists(_action, "strategy")) {
+      var _existing = variable_struct_get(_action, "strategy");
+      if (is_struct(_existing)) {
+        return _existing;
+      }
+    }
+
+    var _factory = _resolve_strategy_factory(_action);
+    if (!is_undefined(_factory) && Animus_Core.is_callable(_factory)) {
+      var _result = undefined;
+      if (is_method(_factory)) {
+        _result = _factory(_ctx_preview, _action);
+      } else {
+        _result = _factory(_ctx_preview, _action);
+      }
+      if (is_struct(_result)) {
+        return _result;
+      }
+    }
+
+    return undefined;
+  };
+
   var _clone_snapshot_value = function(_value) {
     if (is_array(_value)) {
       var _len = array_length(_value);
@@ -626,8 +676,16 @@ function GOAP_Executor() constructor {
     var _has_actions = (is_struct(plan_ref) && variable_struct_exists(plan_ref, "actions") && is_array(plan_ref.actions));
     if (_has_actions && step_index >= 0 && step_index < array_length(plan_ref.actions) && ((_restored_status == "running") || (_restored_status == "stopping"))) {
       var _current_action = plan_ref.actions[step_index];
-      active_strategy = new GOAP_ActionStrategy(_current_action);
       var _ctx_start = _make_context();
+      var _restored_strategy = _resolve_strategy_instance(_current_action, _ctx_start);
+      if (is_struct(_restored_strategy)) {
+        active_strategy = _restored_strategy;
+      } else {
+        active_strategy = new Animus_ActionStrategy(_current_action);
+      }
+      if (is_struct(active_strategy) && !variable_struct_exists(active_strategy, "action_reference")) {
+        active_strategy.action_reference = _current_action;
+      }
       if (is_undefined(_expected_duration)) {
         _expected_duration = active_strategy.get_expected_duration(_ctx_start);
       }
@@ -956,11 +1014,24 @@ function GOAP_Executor() constructor {
       action_name = "action@" + string(step_index);
     }
 
-    // Instantiate per-action runtime adapter
-    active_strategy = new GOAP_ActionStrategy(_action);
     elapsed_in_step = 0;
     held_reservations = [];
     _expected_duration = undefined;
+
+    var _ctx_preview = _make_context();
+    var _custom_strategy = _resolve_strategy_instance(_action, _ctx_preview);
+
+    // Instantiate per-action runtime adapter
+    if (is_struct(_custom_strategy)) {
+      active_strategy = _custom_strategy;
+    } else {
+      active_strategy = new Animus_ActionStrategy(_action);
+    }
+
+    if (is_struct(active_strategy) && !variable_struct_exists(active_strategy, "action_reference")) {
+      active_strategy.action_reference = _action;
+    }
+
     _trace(_DBG_T_ACTION_STEP, step_index, action_name);
 
     if (!_check_strategy_shape(active_strategy, action_name)) {
@@ -1170,4 +1241,10 @@ function GOAP_Executor() constructor {
   _u32 = function(_v) {
     return (_v & 0xffffffff);
   };
+}
+
+/// @desc Backward compatible alias that exposes the Animus-prefixed name.
+/// @returns {Animus_Executor}
+function Animus_Executor() constructor {
+  return GOAP_Executor();
 }
