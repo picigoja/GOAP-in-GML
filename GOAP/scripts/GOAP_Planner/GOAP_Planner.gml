@@ -1,5 +1,5 @@
 function GOAP_Planner() constructor {
-  config = { max_expansions: 2000, max_depth: 64, reopen_closed_on_better_g: true };
+  config = { max_expansions: 2000, max_depth: 64, reopen_closed_on_better_g: true, expansions_used: 0 };
   reuse_policy = { allow_reuse: true, allow_partial: true };
   last_plan = undefined;
 
@@ -331,9 +331,17 @@ function GOAP_Planner() constructor {
         last_plan.meta.nodes_expanded = 0;
         last_plan.meta.nodes_generated = 0;
         last_plan.meta.open_peak = 0;
+        if (is_struct(last_plan.meta)) {
+          last_plan.meta.expansions_used = 0;
+          last_plan.meta.is_partial = false;
+          if (variable_struct_exists(last_plan.meta, "reason")) {
+            variable_struct_remove(last_plan.meta, "reason");
+          }
+        }
         last_plan.meta.state_hash_start = _state_hash(_initial_state);
         last_plan.meta.state_hash_end = _state_hash(_final_state);
         last_plan.meta.search_stats_json = _debug_stats_json({ nodes_expanded: 0, nodes_generated: 0, open_peak: 0 });
+        config.expansions_used = 0;
         return last_plan;
       }
     }
@@ -388,20 +396,50 @@ function GOAP_Planner() constructor {
         var _meta_referenced = {};
         _merge_referenced_keys(_meta_referenced, _goal_referenced);
 
+        var _expansions_used = variable_struct_exists(_search_result, "expansions_used") ? _search_result.expansions_used : _search_result.nodes_expanded;
+        var _is_partial_plan = false;
+        if (variable_struct_exists(_search_result, "is_partial")) {
+          _is_partial_plan = bool(_search_result.is_partial);
+        }
+        var _partial_reason = undefined;
+        if (_is_partial_plan && variable_struct_exists(_search_result, "reason")) {
+          _partial_reason = _search_result.reason;
+        }
+
+        var _search_stats = {
+          nodes_expanded: _search_result.nodes_expanded,
+          nodes_generated: _search_result.nodes_generated,
+          open_peak: _search_result.open_peak,
+          is_partial: _is_partial_plan
+        };
+        if (_is_partial_plan && !is_undefined(_partial_reason)) {
+          if (!is_string(_partial_reason)) {
+            _partial_reason = string(_partial_reason);
+          }
+          _search_stats.reason = _partial_reason;
+        }
+
+        var _plan_meta = {
+          built_at_tick: _tick,
+          nodes_expanded: _search_result.nodes_expanded,
+          nodes_generated: _search_result.nodes_generated,
+          open_peak: _search_result.open_peak,
+          referenced_keys: _meta_referenced,
+          state_hash_start: _state_hash(_initial_state),
+          state_hash_end: _state_hash(_plan_state),
+          expansions_used: _expansions_used,
+          is_partial: _is_partial_plan,
+          search_stats_json: _debug_stats_json(_search_stats)
+        };
+        if (_is_partial_plan && !is_undefined(_partial_reason)) {
+          _plan_meta.reason = _partial_reason;
+        }
+
         var _plan_struct = {
           goal: _goal,
           actions: _actions_combined,
           cost: _plan_cost,
-          meta: {
-            built_at_tick: _tick,
-            nodes_expanded: _search_result.nodes_expanded,
-            nodes_generated: _search_result.nodes_generated,
-            open_peak: _search_result.open_peak,
-            referenced_keys: _meta_referenced,
-            state_hash_start: _state_hash(_initial_state),
-            state_hash_end: _state_hash(_plan_state),
-            search_stats_json: _debug_stats_json({ nodes_expanded: _search_result.nodes_expanded, nodes_generated: _search_result.nodes_generated, open_peak: _search_result.open_peak })
-          },
+          meta: _plan_meta,
           to_string: function() {
             var _goal_ref = self.goal;
             var _goal_name = (is_struct(_goal_ref) && variable_struct_exists(_goal_ref, "name")) ? string(_goal_ref.name) : "<goal>";
@@ -412,6 +450,7 @@ function GOAP_Planner() constructor {
           }
         };
 
+        config.expansions_used = _expansions_used;
         last_plan = _plan_struct;
         _self._active_referenced_keys = undefined;
         return _plan_struct;
@@ -421,6 +460,7 @@ function GOAP_Planner() constructor {
     }
 
     last_plan = undefined;
+    config.expansions_used = 0;
     _self._active_referenced_keys = undefined;
     return undefined;
   };
@@ -580,13 +620,24 @@ function GOAP_Planner() constructor {
     var _max_depth = config.max_depth;
 
     var _result = undefined;
+    var _best_node = _root;
+    var _best_f = _root.f;
+    var _budget_exhausted = false;
 
     while (!ds_priority_empty(_open)) {
-      if (_expansions >= _max_expansions) break;
+      if (_expansions >= _max_expansions) {
+        _budget_exhausted = true;
+        break;
+      }
       var _current = ds_priority_delete_min(_open);
       _open_count -= 1;
       _nodes_expanded += 1;
       _expansions += 1;
+
+      if (is_undefined(_best_node) || _current.f < _best_f) {
+        _best_node = _current;
+        _best_f = _current.f;
+      }
 
       var _hash_current = _state_hash(_current.state);
       var _had = ds_map_exists(_closed, _hash_current);
@@ -637,26 +688,42 @@ function GOAP_Planner() constructor {
             _open_count += 1;
             if (_open_count > _open_peak) _open_peak = _open_count;
             _nodes_generated += 1;
+            if (_f < _best_f) {
+              _best_node = _next_node;
+              _best_f = _f;
+            }
           }
         }
       }
     }
 
     var _plan = undefined;
-    if (!is_undefined(_result)) {
+    var _target_node = _result;
+    var _reason = undefined;
+    var _is_partial = false;
+    if (is_undefined(_target_node)) {
+      _is_partial = true;
+      _reason = _budget_exhausted ? "budget_exhausted" : "no_solution";
+      _target_node = _best_node;
+    }
+
+    if (!is_undefined(_target_node)) {
       var _actions_taken = [];
-      var _walker = _result;
+      var _walker = _target_node;
       while (!is_undefined(_walker) && !is_undefined(_walker.via_action)) {
         array_insert(_actions_taken, 0, _walker.via_action);
         _walker = _walker.parent;
       }
       _plan = {
         actions: _actions_taken,
-        cost: _result.g,
-        final_state: _result.state,
+        cost: _target_node.g,
+        final_state: _target_node.state,
         nodes_expanded: _nodes_expanded,
         nodes_generated: _nodes_generated,
-        open_peak: _open_peak
+        open_peak: _open_peak,
+        is_partial: _is_partial,
+        reason: _reason,
+        expansions_used: _nodes_expanded
       };
     }
 
@@ -692,6 +759,9 @@ function GOAP_Planner() constructor {
     if (is_undefined(_last)) return false;
     if (!is_struct(_last) || !variable_struct_exists(_last, "meta")) return false;
     var _meta = _last.meta;
+    if (is_struct(_meta) && variable_struct_exists(_meta, "is_partial")) {
+      if (bool(_meta.is_partial)) return false;
+    }
     if (!is_struct(_meta) || !variable_struct_exists(_meta, "referenced_keys")) return false;
     var _keys_struct = _meta.referenced_keys;
     if (!is_struct(_keys_struct)) return false;
