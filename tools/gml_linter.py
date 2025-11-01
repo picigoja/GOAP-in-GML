@@ -211,8 +211,9 @@ def scan_planner_calls(path):
 
 def scan_strategy_structs(path):
     text, _ = iter_lines(path)
-    # Look for build_strategy returning a struct literal `{ ... }`
-    for m in re.finditer(r'\bbuild_strategy\b.*?{', text, re.S):
+    # Look for common strategy-factory fields assigned a struct literal, e.g. `build_strategy = { ... }`
+    # Use a stricter pattern to avoid matching occurrences inside lists or comments.
+    for m in re.finditer(r'\b(?:build_strategy|create_strategy|strategy_factory|make_strategy|strategy_builder)\b\s*=\s*{', text):
         struct_start = m.end()-1
         depth = 1
         i = struct_start
