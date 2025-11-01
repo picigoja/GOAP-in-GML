@@ -1,154 +1,128 @@
-/// Main component GOAP Agent.
-/// @param {String} _name
-/// @param {Array<Struct.GOAP_Belief>} _beliefs
-/// @param {Array<Struct.GOAP_Action>} _actions
-/// @param {Array<Struct.GOAP_Goal>} _goals
-function GOAP_Agent(_name, _beliefs = [], _actions = [], _goals = []) constructor {
-    name = _name;
-    beliefs = _beliefs;
-    actions = _actions;
-    goals   = _goals;
-    
-    memory       = new GOAP_Memory();
-    sensors      = [];
-    memory_clock = 0; // optional external tick source
+function GOAP_Agent() constructor {
+  // Identity
+  name = "Agent";
 
-    register_sensor = function(_sensor) {
-        if (array_get_index(sensors, _sensor) >= 0) return;
-        _sensor.attach(memory);
-        array_push(sensors, _sensor);
-    };
+  // Core references
+  planner = undefined;           // GOAP_Planner
+  memory = undefined;            // GOAP_Memory
+  executor = undefined;          // GOAP_Executor (optional; not used here)
 
-    tick_perception = function(_dt) {
-        memory.tick();
-        memory_clock += _dt;
+  // Agent knowledge
+  beliefs = [];                  // array or map of GOAP_Belief
+  goals = [];                    // array of GOAP_Goal
+  actions = [];                  // optional: catalog for UI/debug only
 
-        for (var _i = 0; _i < array_length(sensors); ++_i) {
-            var _sensor = sensors[_i];
-            if (!is_undefined(_sensor.poll)) {
-                _sensor.poll(_dt, memory_clock);
-            }
-        }
-    };
+  // Planning state (read-only for others)
+  last_goal = undefined;
+  last_plan = undefined;         // planner result object
+  last_plan_tick = 0;
 
-    get_memory = function() { return memory; };
+  // Orchestration config
+  config = {
+    perception_period: 1,        // ticks
+    planning_period: 1           // ticks
+  };
 
-    get_snapshot = function() {
-        memory.tick();
-        return memory.snapshot(); // planner receives read-only struct copy
-    };
+  // Internal timers
+  _next_perception_tick = 0;
+  _next_planning_tick = 0;
 
-    acknowledge_effects = function(_effects_struct) {
-        var _keys = variable_struct_get_names(_effects_struct);
-        for (var _i = 0; _i < array_length(_keys); ++_i) {
-            var _key = _keys[_i];
-            memory.write(_key, variable_struct_get(_effects_struct, _key));
-            memory.mark_clean(_key);
-        }
-    };
+  // ----- Binding -----
+  bind = function(_planner, _memory, _executor_optional) {
+    planner = _planner;
+    memory = _memory;
+    executor = _executor_optional; // may be undefined; executor not used here
+    return self;
+  };
 
-    on_memory_update = function(_listener, _memory_key, _value, _dirty, _timestamp) {
-        // Optional agent-level hook for debugging or analytics
-    };
+  set_goals = function(_goals_array) {
+    goals = _goals_array;
+    return self;
+  };
 
-    current_action = undefined;
-    action_plan    = undefined;
+  set_actions = function(_actions_array) {
+    actions = _actions_array;
+    return self;
+  };
 
-    current_goal = undefined;
-    last_goal    = undefined;
+  set_beliefs = function(_beliefs_collection) {
+    beliefs = _beliefs_collection;
+    return self;
+  };
 
-    planner = new GOAP_Planner();
+  bind_beliefs_to_memory = function() {
+    if (is_undefined(memory)) { return; }
+    // supports array or struct/map of beliefs
+    if (is_array(beliefs)) {
+      var _len = array_length(beliefs);
+      for (var _i = 0; _i < _len; ++_i) {
+        var _b = beliefs[_i];
+        if (is_method(_b, bind_to_memory)) { _b.bind_to_memory(memory); }
+      }
+      return;
+    }
+    if (is_struct(beliefs)) {
+      var _keys = variable_struct_get_names(beliefs);
+      var _klen = array_length(_keys);
+      for (var _j = 0; _j < _klen; ++_j) {
+        var _bk = _keys[_j];
+        var _b2 = variable_struct_get(beliefs, _bk);
+        if (is_method(_b2, bind_to_memory)) { _b2.bind_to_memory(memory); }
+      }
+    }
+  };
 
-    show_debug_message(string("GOAP Agent Created. Agent {0}, active", self.name));
+  // ----- Perception (sensing hook only) -----
+  tick_perception = function() {
+    // Intentionally empty: actual sensors live elsewhere (SensorBus).
+    // Keep this as a scheduling hook to trigger sensor ticks or lightweight reads.
+  };
 
-    /// @param {String} _name
-    component_find_name = function(_name) {
-        static _n = _name;
-        var _belief_index = array_find_index(self.beliefs, function(_b, _i) { return bool(_b.name == _n); });
-        if _belief_index == -1 return noone;
-        return self.beliefs[_belief_index];
-    };
+  // ----- Planning (no execution) -----
+  tick_planning = function() {
+    if (is_undefined(planner) || is_undefined(memory)) { return; }
+    if (!is_array(goals)) { return; }
 
-    /// @param {Real} _component_id
-    component_find_id = function(_component_id) {
-        static _id = _component_id;
-        var _belief_index = array_find_index(self.beliefs, function(_b, _i) { return bool(_b.component_id == _id); });
-        if _belief_index == -1 return noone;
-        return self.beliefs[_belief_index];
-    };
+    // Planner call uses the new signature
+    var _plan = planner.plan(self, goals, memory, last_goal);
 
-    /// @return {Bool}
-    in_range_of = function(_first_position, _second_position, _range) {
-        return bool(point_distance(_first_position.x, _first_position.y, _second_position.x, _second_position.y) <= _range);
-    };
+    if (!is_undefined(_plan)) {
+      last_plan = _plan;
+      last_goal = _plan.goal;
+      last_plan_tick = memory._now();
+      on_plan(_plan);
+    }
+  };
 
-    start = function() {};
+  // Callback when a new/updated plan is available (no execution here)
+  on_plan = function(_plan) {
+    // Optionally write a status into memory (only on change).
+    if (!is_undefined(memory)) {
+      var _current_goal_name = is_struct(_plan) && variable_struct_exists(_plan, "goal") ? _plan.goal.name : undefined;
+      var _prev = memory.read("agent.plan.goal_name", undefined);
+      if (_prev != _current_goal_name) {
+        memory.write("agent.plan.goal_name", _current_goal_name, "agent", 0.9);
+      }
+    }
+  };
 
-    update = function() {
-        var _action_started = true;
+  // ----- Update loop entrypoint (or call these separately from your Step) -----
+  tick = function() {
+    if (is_undefined(memory)) { return; }
+    var _now = memory._now();
 
-        if self.current_action == undefined && self.action_plan == undefined {
-            show_debug_message("Calculating any potential new plan");
-            calculate_plan();
-        }
+    if (_now >= _next_perception_tick) {
+      _next_perception_tick = _now + config.perception_period;
+      tick_perception();
+    }
 
-        if self.action_plan != undefined && array_length(self.action_plan.actions) > 0 && self.current_action == undefined {
-            self.current_action = array_shift(self.action_plan.actions);
-            show_debug_message(string("Current action: {0}", self.current_action.name));
-            _action_started = false;
-        }
+    if (_now >= _next_planning_tick) {
+      _next_planning_tick = _now + config.planning_period;
+      tick_planning();
+    }
+  };
 
-        if self.action_plan != undefined && self.current_action != undefined {
-            if !_action_started {
-                show_debug_message(string("GOAP Agent {0} started Action {1}", self.name, self.current_action.name));
-                self.current_action.start();
-                _action_started = true;
-            }
-
-            if self.current_action.is_complete() {
-                show_debug_message(string("Action {0} is complete", self.current_action.name));
-                self.current_action.stop();
-                self.current_action = undefined;
-
-                if array_length(self.action_plan.actions) == 0 {
-                    show_debug_message("Plan complete");
-                    replan();
-                }
-            } else if self.current_action.can_perform() {
-                self.current_action.update();
-            } else {
-                show_debug_message("Plan invalidated, replanning");
-                replan();
-            }
-        }
-    };
-
-    replan = function() {
-        self.last_goal    = self.current_goal;
-        self.current_goal = undefined;
-        if (self.current_action != undefined) self.current_action.stop();
-        self.current_action = undefined;
-        self.action_plan    = undefined;
-    };
-
-    calculate_plan = function() {
-        var _goals_to_check = self.goals;
-
-        if self.current_goal != undefined {
-            show_debug_message("Current goal exists, checking goals with higher priority");
-            _goals_to_check = array_filter(self.goals, function(_goal) {
-                var _priority_level = self.current_goal == undefined ? 0 : self.current_goal.priority;
-                return bool(_goal.priority > _priority_level);
-            });
-        }
-
-        var _plan = self.planner.plan(self, _goals_to_check, self.last_goal);
-        if _plan != undefined {
-            self.action_plan  = _plan;
-            self.current_goal = _plan.goal;
-            show_debug_message(self.action_plan.name);
-        } else {
-            show_debug_message("No valid plan found");
-        }
-    };
+  // ----- Deprecated/removed execution methods (intentionally absent) -----
+  // No perform_action(), no update_action(), no stop_action(), no invariant checks.
+  // Execution belongs to GOAP_Executor bound externally.
 }
