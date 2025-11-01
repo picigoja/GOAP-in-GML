@@ -1,0 +1,56 @@
+# Paths are globs relative to repo root
+core_files:
+  planner:
+    - "GOAP/scripts/**/Animus_Planner.gml"
+  agent:
+    - "GOAP/scripts/**/Animus_Agent.gml"
+  executor:
+    - "GOAP/scripts/**/Animus_Executor.gml"
+  strategies:
+    - "GOAP/scripts/**/Animus_*Strategy*.gml"
+    - "GOAP/scripts/**/Animus_StrategyTemplates.gml"
+
+# Allowed global usages, if any (keep tight)
+allowed_globals: []
+
+# Determinism: flag these functions anywhere
+ban_random:
+  - "\\brandom\("
+  - "\\birandom\("
+  - "\\birandom_range\("
+  - "\\brandom_range\("
+  - "\\bchoose\("
+  - "\\brandomize\("
+ban_wallclock:
+  - "\\bdate_"
+  - "\\bget_timer\("
+  - "\\bcurrent_time\b"
+  - "\\bos_get_info\("
+
+# Legacy types/APIs that must not appear
+ban_legacy:
+  - "\\bGOAP_Node\\b"
+  - "\\bGOAP_ActionPlan\\b"
+  - "\\bGOAP_Plan\\b(?!\\s*=\\s*Animus_)"
+
+# Style pitfalls
+ban_silent_return: "\\breturn\\s*;\\s*$"   # explicit outcomes only
+ban_tabs: "\t"
+ban_trailing_ws: "[ \t]+$"
+ban_globals: "\\bglobal\\.\\w+"
+
+# Planner contract
+planner_call_regex: "planner\\s*\\.\\s*plan\\s*\("  # we’ll analyze arg count
+required_arg_count: 4                           # agent, goals_to_check, last_goal, memory
+
+# Strategy interface (methods required on returned struct)
+strategy_required_methods:
+  - "start"
+  - "update"
+  - "stop"
+  - "invariant_check"
+
+# Memory snapshot use before planning should prefer snapshot(false)
+prefer_snapshot_false:
+  enabled: true
+  pattern: "snapshot\\s*\\(([^)]*)\\)"

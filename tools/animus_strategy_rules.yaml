@@ -1,0 +1,65 @@
+# Where to look
+strategy_file_globs:
+  - "GOAP/scripts/**/Animus_*Strategy*.gml"
+  - "GOAP/scripts/**/Animus_Action*.gml"
+  - "GOAP/scripts/**/Animus_*Action*.gml"
+
+# Consider a file "templated" if it references the official template module
+template_namespace_regex: "\\bAnimus_StrategyTemplates\\s*\\."
+
+# Heuristics to guess the legacy strategy pattern
+instant_heuristics:
+  - "\\bupdate\\s*=\\s*function\\s*\\(.*?\\)\\s*\\{[^}]*\\breturn\\s+\\\"success\\\"\\s*;[^}]*\\}"
+  - "\\binvariant_check\\s*=\\s*function\\s*\\b[^}]*\\breturn\\s+true\\s*;"
+
+timed_heuristics:
+  - "\\b(elapsed|_elapsed|time_accum|t)\\s*=\\s*0"
+  - "\\bupdate\\s*=\\s*function\\s*\\(.*?,\\s*dt\\)[^}]*\\1\\s*\\+=\\s*dt"
+  - "\\b(get_expected_duration|expected_duration|target_time)\\b"
+  - "\\breturn\\s+\\\"success\\\"\\b[^}]*$"
+  # Local accumulator exists (common names)
+  - "\\b(elapsed|_elapsed|time_accum|t)\\s*=\\s*0\\b"
+  # update(ctx, dt) and some var += dt (we don't need the same var name)
+  - "\\bupdate\\s*=\\s*function\\s*\\(\\s*[^,)]*\\s*,\\s*dt\\s*\\)\\s*\\{[^}]*\\b[a-zA-Z_]\\w*\\s*\\+=\\s*dt\\b"
+  # Any expected duration signal
+  - "\\b(get_expected_duration|expected_duration|target_time)\\b"
+  # Eventually returns \"success\" in update body
+  - "\\bupdate\\s*=\\s*function\\b[\\s\\S]*?\\breturn\\s+\\\"success\\\"\\s*;"
+
+move_heuristics:
+  - "\\b(invariant|invariant_check)\\s*=\\s*function\\s*\\b[^}]*\\b(path|nav|reservation)\\b"
+  - "\\bget_reservation_keys\\s*=\\s*function\\s*\\b"
+  - "\\b(get_last_invariant_key|get_path_key)\\b"
+
+# Comment banner inserted during --patch (kept deliberately loud)
+patch_banner_start: "/* ===== ANIMUS TEMPLATE SUGGESTION (auto-inserted) ====="
+patch_banner_end:   "===== END ANIMUS TEMPLATE SUGGESTION ===== */"
+
+# Template scaffolds (commented) to inject; kept generic & safe
+template_scaffolds:
+  instant: |
+    // Suggested template: Instant
+    // Replace legacy build_strategy with:
+    // return Animus_StrategyTemplates.instant({
+    //   on_start: function(ctx) { /* optional: side-effects from legacy start */ },
+    //   on_stop: function(ctx, reason) { /* optional cleanup */ }
+    // });
+  timed: |
+    // Suggested template: Timed
+    // Replace legacy build_strategy with:
+    // return Animus_StrategyTemplates.timed({
+    //   expected_duration: /* TODO: derive from legacy get_expected_duration or constant */,
+    //   timeout: /* optional shorter timeout */,
+    //   on_start: function(ctx) { /* pull from legacy start if needed */ },
+    //   on_stop: function(ctx, reason) { /* cleanup */ }
+    // });
+  move: |
+    // Suggested template: Move-style
+    // Replace legacy build_strategy with:
+    // return Animus_StrategyTemplates.move({
+    //   invariant_check: function(ctx) { /* delegate to legacy invariant_check */ },
+    //   reservation_keys: /* from legacy get_reservation_keys() if present, else [] */,
+    //   last_invariant_key: /* from legacy get_last_invariant_key() if present */,
+    //   on_start: function(ctx) { /* optional */ },
+    //   on_stop: function(ctx, reason) { /* optional */ }
+    // });

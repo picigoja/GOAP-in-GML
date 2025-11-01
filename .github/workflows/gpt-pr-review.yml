@@ -1,0 +1,28 @@
+name: GPT PR Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  pull-requests: write
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ChatGPT code review
+        uses: adshao/openai-chatgpt-code-review@v0.2.5
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          system-prompt: |
+            You are the Animus GML reviewer. Enforce:
+            - planner.plan has 4 args (agent, goals_to_check, last_goal, memory)
+            - immediately assert plan shape with Animus_Core.assert_plan_shape(plan)
+            - no legacy GOAP_Node/ActionPlan
+            - strategies expose start/update/stop/invariant_check; prefer templates
+            - deterministic execution (no random()/choose(), no wall-clock)
+            - no globals; minimal diffs; cite file:line; show ```gml patches only.
+          review-comment-prefix: "GPT review:"
+          max-diff-length: 12000

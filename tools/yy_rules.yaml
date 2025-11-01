@@ -1,0 +1,22 @@
+# Path to your GameMaker Studio project file (.yyp)
+yyp_path: "GOAP/GOAP.yyp"
+
+# Where scripts live (globs)
+script_globs:
+  - "GOAP/scripts/**/*.gml"
+
+# Require that each .gml has a matching .yy next to it
+require_script_yy: true
+
+# Block PRs if a resource is referenced in .yyp but file missing on disk
+fail_on_missing_resource: true
+
+# Optional: Order file GameMaker maintains; warn if missing entries
+resource_order_file: "GOAP/GOAP.resource_order"
+
+# Heuristics
+# If filename and Script.yy 'name' disagree, fail (prevents silent re-IDs)
+enforce_filename_matches_name: true
+
+# If Script.yy path and actual filesystem path disagree, fail
+enforce_path_sync: true

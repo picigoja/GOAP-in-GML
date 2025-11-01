@@ -1,0 +1,48 @@
+name: Animus CI
+on:
+  pull_request:
+  push:
+    branches: [ main, develop ]
+permissions:
+  contents: read
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Lint GML (Animus rules)
+        run: |
+          python tools/gml_linter.py
+
+  yy_integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Validate GameMaker .yy/.yyp integrity
+        run: python tools/yy_integrity.py
+
+  strategy_templates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Enforce strategy templates (report-only)
+        run: |
+          python tools/strategy_template_enforcer.py --strict || true
