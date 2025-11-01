@@ -8,6 +8,10 @@ function GOAP_Executor() constructor {
   active_strategy = undefined;   // instance of GOAP_ActionStrategy for current action
   status = "idle";        // "idle" | "starting" | "running" | "stopping" | "finished" | "failed" | "interrupted"
   elapsed_in_step = 0;     // accumulates dt for current action
+  reservation_bus = undefined;   // shared struct map of reservation key -> owner id
+  held_reservations = [];         // array of currently held reservation keys
+  _expected_duration = undefined; // expected duration hint for active action
+  _owner_id = undefined;          // stable owner identifier for reservations
 
   // Sticky execution context (provided at start)
   _agent = undefined;
@@ -26,12 +30,17 @@ function GOAP_Executor() constructor {
 
   // --- Public API ---
 
-  start = function(_plan, _agent_ref, _world_ref, _bb_ref, _mem_ref) {
+  start = function(_plan, _agent_ref, _world_ref, _bb_ref, _mem_ref, _bus_opt) {
     plan_ref = _plan;
     _agent = _agent_ref;
     _world = _world_ref;
     _blackboard = _bb_ref;
     _memory = _mem_ref;
+
+    reservation_bus = is_undefined(_bus_opt) ? {} : _bus_opt;
+    held_reservations = [];
+    _expected_duration = undefined;
+    _owner_id = (is_struct(_agent) && variable_struct_exists(_agent, "id")) ? _agent.id : string(_agent);
 
     step_index = -1;
     active_strategy = undefined;
@@ -43,7 +52,9 @@ function GOAP_Executor() constructor {
       return true;
     }
 
-    _set_status("finished");
+    if (status == "starting") {
+      _set_status("finished");
+    }
     return false;
   };
 
@@ -61,7 +72,9 @@ function GOAP_Executor() constructor {
     if (status == "starting" && is_undefined(active_strategy)) {
       if (!_advance_to_next_action()) {
         // No more actions -> finished
-        _set_status("finished");
+        if (status == "starting") {
+          _set_status("finished");
+        }
         return status;
       }
     }
@@ -69,6 +82,7 @@ function GOAP_Executor() constructor {
     if (status == "running") {
       // Update current action
       if (is_undefined(active_strategy)) {
+        _release_reservations();
         _set_status("failed");
         return status;
       }
@@ -79,6 +93,7 @@ function GOAP_Executor() constructor {
       if (is_undefined(_ok) || !_ok) {
         _set_status("stopping");
         active_strategy.stop(_ctx, "invariant_fail");
+        _release_reservations();
         active_strategy = undefined;
         _set_status("interrupted");
         return status;
@@ -86,6 +101,16 @@ function GOAP_Executor() constructor {
 
       elapsed_in_step += _dt;
       _ctx = _make_context();
+
+      if (!is_undefined(_expected_duration) && is_real(_expected_duration) && elapsed_in_step > _expected_duration) {
+        _set_status("stopping");
+        active_strategy.stop(_ctx, "timeout");
+        _release_reservations();
+        active_strategy = undefined;
+        _set_status("failed");
+        return status;
+      }
+
       // Runtime-only: Strategy drives lifecycles
       var _result = active_strategy.update(_ctx, _dt);
 
@@ -99,6 +124,7 @@ function GOAP_Executor() constructor {
         // Cleanly stop and advance
         _set_status("stopping");
         active_strategy.stop(_ctx, "success");
+        _release_reservations();
         active_strategy = undefined;
         elapsed_in_step = 0;
 
@@ -116,7 +142,9 @@ function GOAP_Executor() constructor {
         if (_has_next) {
           _set_status("starting");
           if (!_advance_to_next_action()) {
-            _set_status("finished");
+            if (status == "starting") {
+              _set_status("finished");
+            }
           }
         } else {
           _set_status("finished");
@@ -126,6 +154,7 @@ function GOAP_Executor() constructor {
         // Stop and mark failed
         _set_status("stopping");
         active_strategy.stop(_ctx, "failed");
+        _release_reservations();
         active_strategy = undefined;
         _set_status("failed");
         return status;
@@ -133,6 +162,7 @@ function GOAP_Executor() constructor {
         // Stop and mark interrupted
         _set_status("stopping");
         active_strategy.stop(_ctx, "interrupted");
+        _release_reservations();
         active_strategy = undefined;
         _set_status("interrupted");
         return status;
@@ -140,6 +170,7 @@ function GOAP_Executor() constructor {
         // Defensive: treat unknown as failure
         _set_status("stopping");
         active_strategy.stop(_ctx, "invalid_result");
+        _release_reservations();
         active_strategy = undefined;
         _set_status("failed");
         return status;
@@ -169,6 +200,7 @@ function GOAP_Executor() constructor {
       active_strategy.stop(_ctx, string(_reason));
       active_strategy = undefined;
     }
+    _release_reservations();
     _set_status("interrupted");
   };
 
@@ -201,14 +233,68 @@ function GOAP_Executor() constructor {
     // Instantiate per-action runtime adapter
     active_strategy = new GOAP_ActionStrategy(_action);
     elapsed_in_step = 0;
+    held_reservations = [];
+    _expected_duration = undefined;
+
+    var _ctx = _make_context();
+
+    if (!is_struct(reservation_bus)) {
+      reservation_bus = {};
+    }
+
+    var _keys = active_strategy.get_reservation_keys(_ctx);
+    if (is_undefined(_keys)) {
+      _keys = [];
+    } else if (!is_array(_keys)) {
+      _keys = [_keys];
+    }
+
+    for (var _i = 0; _i < array_length(_keys); _i++) {
+      var _key = _keys[_i];
+      if (variable_struct_exists(reservation_bus, _key)) {
+        var _owner = reservation_bus[$ _key];
+        if (_owner != _owner_id) {
+          active_strategy = undefined;
+          _release_reservations();
+          _set_status("stopping");
+          _set_status("interrupted");
+          return false;
+        }
+      }
+    }
+
+    for (var _j = 0; _j < array_length(_keys); _j++) {
+      var _acquired_key = _keys[_j];
+      reservation_bus[$ _acquired_key] = _owner_id;
+      array_push(held_reservations, _acquired_key);
+    }
+
+    _expected_duration = active_strategy.get_expected_duration(_ctx);
 
     // Start the action
-    var _ctx = _make_context();
+    _ctx = _make_context();
     _set_status("running");
     // Allow start to set up resources; it returns void
     active_strategy.start(_ctx);
 
     return true;
+  };
+
+  _release_reservations = function() {
+    if (!is_struct(reservation_bus)) {
+      reservation_bus = {};
+    }
+
+    if (is_array(held_reservations)) {
+      for (var _r = 0; _r < array_length(held_reservations); _r++) {
+        var _res_key = held_reservations[_r];
+        if (variable_struct_exists(reservation_bus, _res_key) && reservation_bus[$ _res_key] == _owner_id) {
+          variable_struct_remove(reservation_bus, _res_key);
+        }
+      }
+    }
+    held_reservations = [];
+    _expected_duration = undefined;
   };
 
   _make_context = function() {
