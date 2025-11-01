@@ -1,7 +1,7 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-01T19:05:19.2175971Z"
+  updated_at: "2025-11-01T19:18:17.6221269Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
@@ -111,13 +111,14 @@ tasks:
       get_reservation_keys(), optional get_last_invariant_key(). No executor-side special cases.
     acceptance:
       - "Sample actions using each template run through Executor without custom glue."
-    status: queued
+    status: done
     priority: 1
     dependencies: ["T02"]
     labels: ["executor", "strategies"]
     anchors:
       - GOAP/scripts/Animus_StrategyTemplates/Animus_StrategyTemplates.gml
       - GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml
+      - Animus_StrategyTemplates.gml
   - id: T04
     title: "Error surfaces (R2)"
     description: >
@@ -274,4 +275,12 @@ log:
     acceptance_verification:
       - "Either GOAP_* aliases compile in a shim test OR README clearly documents deprecation/scope. - PASS: Implemented GOAP_Action/Goal/Belief/Memory/Planner shims forwarding to Animus_* with README coverage."
       - "No stray is_callable(...) uses outside Animus_Core. - PASS: rg search shows only Animus_Core.is_callable usages remain."
+  - when: "2025-11-01T19:18:17.6221269Z"
+    task_id: "T03"
+    summary: "Locked strategy templates to expose deterministic duration/reservation metadata and reset move invariant hints."
+    files_touched:
+      - "Animus_StrategyTemplates.gml"
+      - "GOAP/Animus_CodexHelper.yaml"
+    acceptance_verification:
+      - "Sample actions using each template run through Executor without custom glue. - PASS: Strategy_Instant/Timed/Move now explicitly implement get_expected_duration and reservation key accessors on their Animus_ActionStrategy outputs, satisfying the executor shape checks (code inspection)."
 decisions: []
