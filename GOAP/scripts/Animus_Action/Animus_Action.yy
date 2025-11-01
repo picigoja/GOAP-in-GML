@@ -1,9 +1,9 @@
 {
   "$GMScript":"v1",
-  "%Name":"GOAP_Action",
+  "%Name":"Animus_Action",
   "isCompatibility":false,
   "isDnD":false,
-  "name":"GOAP_Action",
+  "name":"Animus_Action",
   "parent":{
     "name":"GOAP",
     "path":"GOAP.yyp",
