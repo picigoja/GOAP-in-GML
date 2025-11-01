@@ -1,51 +1,56 @@
 ## Quick orientation for AI coding agents
 
-This repository implements Animus — a GOAP (Goal-Oriented Action Planning) framework written in GameMaker Language (GML). The guidance below focuses on codebase structure, developer workflows, and concrete examples to make edits safe and productive.
+This repo contains Animus — a GOAP (Goal-Oriented Action Planning) framework written in GameMaker Language (GML) plus a small Python toolchain for repo checks.
 
-### Big picture
-- Runtime: GameMaker project at `GOAP/GOAP.yyp` (open in GameMaker Studio matching the versions in `GOAP/Animus_CodexPlaybook.md`).
-- Main pieces (see `GOAP/scripts/*`):
-  - Planner: `GOAP/scripts/Animus_Planner/Animus_Planner.gml` (A* search, heuristics, plan reuse, meta.referenced_keys)
-  - Memory: `GOAP/scripts/Animus_Memory/Animus_Memory.gml` (read/write/snapshot, dirty tracking)
-  - Agent: `GOAP/scripts/Animus_Agent/Animus_Agent.gml` (binds planner, memory, executor; tick loop)
-  - Executor & Strategies: `GOAP/scripts/Animus_Executor/Animus_Executor.gml`, `GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml`, and `Animus_StrategyTemplates.gml`
-  - Domain models: `Animus_Action`, `Animus_Goal`, `Animus_Belief`, `Animus_Predicate`
+### Big picture (essential files)
+- GameMaker project: `GOAP/GOAP.yyp` (open in GameMaker Studio matching `GOAP/Animus_CodexPlaybook.md`).
+- Core runtime (see `GOAP/scripts/*`):
+  - Planner: `GOAP/scripts/Animus_Planner/Animus_Planner.gml` (A* search, heuristics, plan reuse via `meta.referenced_keys`).
+  - Memory: `GOAP/scripts/Animus_Memory/Animus_Memory.gml` (read/write, snapshot, dirty tracking).
+  - Agent: `GOAP/scripts/Animus_Agent/Animus_Agent.gml` (binds planner, memory, executor; tick loop).
+  - Executor & strategies: `GOAP/scripts/Animus_Executor/Animus_Executor.gml`, `GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml`, `Animus_StrategyTemplates.gml` (strategy factories).
+  - Domain models: `Animus_Action`, `Animus_Goal`, `Animus_Belief`, `Animus_Predicate` (each in `GOAP/scripts/*`).
 
-### How data flows at runtime (short)
-- Sensors -> Memory: `Animus_SensorHub` and sensors call `memory.write(...)`.
-- Agent.tick(dt) calls sensors, triggers planner when scheduled, and uses `Animus_Executor` to run a plan.
-- Planner builds a plan from the snapshot of `Animus_Memory`; plans include `meta.referenced_keys` used for reuse and invalidation.
+### Key developer workflows / commands
+- Validate linter config (CI preflight):
+  ```powershell
+  python tools/gml_linter.py --validate-only
+  ```
+- Run full GML lint rules:
+  ```powershell
+  python tools/gml_linter.py
+  ```
+- Validate GameMaker .yy/.yyp JSON integrity:
+  ```powershell
+  python tools/yy_integrity.py
+  ```
+- Generate strategy suggestions (enforcer):
+  ```powershell
+  python tools/strategy_template_enforcer.py --verbose
+  # emits tools/.strategy_suggestions.json
+  ```
 
-### Concrete editing & implementation rules (do this in every change)
-- Use `Animus_*` APIs. Legacy `GOAP_*` shims exist in `GOAP/scripts/Animus_Core/Animus_Core.gml` but prefer `Animus_*` names.
-- Respect determinism: do not use wall-clock or OS RNG in strategies; use executor PRNG / logical_time.
-- Use `Animus_Core.assert(...)` and `Animus_Core.is_callable(...)` for guard checks (see `Animus_Core.gml`).
-- Planner contract: planner.plan(...) must either return a proper plan struct or undefined; use `Animus_Core.assert_plan_shape` to validate.
+### Project-specific conventions (do this on every change)
+- Prefer `Animus_*` APIs over legacy `GOAP_*` shims (see `GOAP/scripts/Animus_Core/Animus_Core.gml`).
+- Strategy contract: factories must produce a struct implementing required methods:
+  - Required: `start(context)`, `update(context, dt)`, `stop(context, reason)`, `invariant_check(context)`
+  - Optional: `get_expected_duration`, `get_reservation_keys`, `get_last_invariant_key`.
+  See `GOAP/Animus_StrategyTemplates.gml` for canonical factories.
+- Determinism rules: no wall-clock APIs or OS RNG in planner/strategies. Use executor logical_time / PRNG.
+- Planner contract: `planner.plan(...)` must return a plan struct or `undefined`. Use `Animus_Core.assert_plan_shape(plan)` after planner calls.
+- GameMaker metadata files (`*.yy`, `GOAP.yyp`) are strict JSON — avoid trailing commas. The CI `yy_integrity` checks these.
 
-### Strategy interface (required methods & examples)
-- Strategies returned by actions must implement: `start(context)`, `update(context, dt)`, `stop(context, reason)`, `invariant_check(context)`. Optional: `get_expected_duration`, `get_reservation_keys`, `get_last_invariant_key`.
-- See templated factories: `GOAP/Animus_StrategyTemplates.gml` and example `action.build_strategy` in `README.md` quickstart for usage patterns.
+### Integration & tooling notes
+- CI runs (see `.github/workflows/animus-ci.yml`) include:
+  - `gml_linter.py --validate-only` preflight
+  - `yy_integrity.py` for `.yy/.yyp` JSON
+  - `strategy_template_enforcer.py` to emit suggestions (report-only by default)
+- Suggestions are written to `tools/.strategy_suggestions.json` and the workflows post PR comments when present.
+- Resource ordering: keep `GOAP/GOAP.resource_order` in sync when renaming/moving scripts; `yy_integrity` warns when entries are missing.
 
-### Planner specifics & performance hints
-- Planner uses A* and collects `meta.referenced_keys` so that `Animus_Memory.is_dirty(key)` can invalidate/reuse plans. See `Animus_Planner.plan` and helpers (build_initial_state, should_reuse_plan).
-- Config limits: `config.max_expansions`, `config.time_budget_ms`, and `config.max_depth` exist — changes here affect determinism and tick-performance.
+### Where to look for examples
+- Strategy template examples: `Animus_StrategyTemplates.gml` and usages in `GOAP/scripts/Animus_Action/*`.
+- Planner reuse/invalidation: `GOAP/scripts/Animus_Planner/Animus_Planner.gml` → `should_reuse_plan`, `meta.referenced_keys`.
+- Executor invariants/reservations: `GOAP/scripts/Animus_Executor/Animus_Executor.gml` (search for `reservation_bus`, `invariant_check`).
 
-### Build/run and debug workflows
-- Open `GOAP/GOAP.yyp` in GameMaker Studio version indicated in `GOAP/Animus_CodexPlaybook.md` for full import/build.
-- For unit/debugging in GML: use `Animus_Debug.dump_plan(plan)` and `executor.debug_json()` / `executor.playback_to_string(plan)` to inspect runtime traces.
-- Use `#macro ANIMUS_DEBUG 1` (per repo conventions in the playbook) and `Animus_Core.log()` for structured logging.
-
-### Editing patterns & conventions
-- Naming conventions: variables snake_case, constructors PascalCase, methods in structs use snake_case function fields (see playbook).
-- Each script folder pairs a `.gml` with a `.yy` meta file. Avoid renaming without updating `GOAP/GOAP.resource_order` and the `.yyp` project.
-- Tests / Codex tasks: use `GOAP/Animus_CodexPlaybook.md` and `GOAP/Animus_CodexHelper.yaml` to discover repository tasks and allowed change patterns.
-
-### Integration & cross-cutting concerns
-- Reservation coordination: executor passes `reservation_bus` (a simple map) for resource reservations between agents — check `Animus_Executor` and `Animus_Agent` usage.
-- Memory snapshots are used before planning: prefer `memory.snapshot(false)` for stable planner input.
-
-### Quick code examples to reference
-- Create + wire agent: see README quickstart near `agent.bind(planner, memory, executor)` and `agent.tick(_dt)`.
-- Check planner reuse: `GOAP/scripts/Animus_Planner/Animus_Planner.gml` → `should_reuse_plan` and `meta.referenced_keys`.
-
-If any section is unclear or you want more details (examples of mutations, tests to add, or a pull-request checklist), tell me which part to expand and I will iterate.
+If anything here is unclear or you want this expanded into a PR checklist or quick-edit recipes (e.g., "how to convert an inline strategy to template"), say which part and I'll iterate.
