@@ -30,6 +30,7 @@
     {"id":{"name":"GOAP_Memory","path":"scripts/GOAP_Memory/GOAP_Memory.yy",},},
     {"id":{"name":"GOAP_Planner","path":"scripts/GOAP_Planner/GOAP_Planner.yy",},},
     {"id":{"name":"GOAP_Sensor","path":"scripts/GOAP_Sensor/GOAP_Sensor.yy",},},
+    {"id":{"name":"GOAP_SensorHub","path":"scripts/GOAP_SensorHub/GOAP_SensorHub.yy",},},
   ],
   "resourceType":"GMProject",
   "resourceVersion":"2.0",

@@ -24,6 +24,12 @@ function GOAP_Executor() constructor {
   _world = undefined;
   _blackboard = undefined;
   _memory = undefined;
+  _mem_listener = undefined;
+  _mem_listener_attached = false;
+  _mem_listener_mode = undefined;
+  _belief_listener = undefined;
+  _plan_stale = false;
+  _relevant_keys = undefined;
 
   _set_status = function(_new) {
     if (status != _new) {
@@ -37,11 +43,33 @@ function GOAP_Executor() constructor {
   // --- Public API ---
 
   start = function(_plan, _agent_ref, _world_ref, _bb_ref, _mem_ref, _bus_opt) {
+    if (!is_undefined(_memory) && _memory != _mem_ref) {
+      _detach_memory_listener();
+    }
+
     plan_ref = _plan;
     _agent = _agent_ref;
     _world = _world_ref;
     _blackboard = _bb_ref;
     _memory = _mem_ref;
+    _plan_stale = false;
+    _relevant_keys = undefined;
+
+    if (!is_undefined(plan_ref) && is_struct(plan_ref) && variable_struct_exists(plan_ref, "meta")) {
+      var _meta = plan_ref.meta;
+      if (is_struct(_meta) && variable_struct_exists(_meta, "referenced_keys")) {
+        var _rk = _meta.referenced_keys;
+        if (is_array(_rk)) {
+          _relevant_keys = {};
+          for (var _i = 0; _i < array_length(_rk); ++_i) {
+            var _key_name = string(_rk[_i]);
+            _relevant_keys[$ _key_name] = true;
+          }
+        }
+      }
+    }
+
+    _ensure_memory_listener();
 
     reservation_bus = is_undefined(_bus_opt) ? {} : _bus_opt;
     held_reservations = [];
@@ -107,6 +135,7 @@ function GOAP_Executor() constructor {
         _release_reservations();
         active_strategy = undefined;
         _invalidate_plan("invariant_fail", _ctx);
+        _detach_memory_listener();
         _set_status("interrupted");
         return status;
       }
@@ -120,6 +149,7 @@ function GOAP_Executor() constructor {
         _release_reservations();
         active_strategy = undefined;
         _invalidate_plan("timeout", _ctx);
+        _detach_memory_listener();
         _set_status("failed");
         return status;
       }
@@ -140,6 +170,15 @@ function GOAP_Executor() constructor {
         _release_reservations();
         active_strategy = undefined;
         elapsed_in_step = 0;
+
+        if (_plan_stale) {
+          _plan_stale = false;
+          _ctx = _make_context();
+          _invalidate_plan("stale_memory", _ctx);
+          _detach_memory_listener();
+          _set_status("interrupted");
+          return status;
+        }
 
         var _has_next = false;
         if (plan_ref != undefined && is_struct(plan_ref) && variable_struct_exists(plan_ref, "actions")) {
@@ -162,6 +201,9 @@ function GOAP_Executor() constructor {
         } else {
           _set_status("finished");
         }
+        if (status == "finished") {
+          _detach_memory_listener();
+        }
         return status;
       } else if (_result == "failed") {
         // Stop and mark failed
@@ -170,6 +212,7 @@ function GOAP_Executor() constructor {
         _release_reservations();
         active_strategy = undefined;
         _invalidate_plan("action_failed", _ctx);
+        _detach_memory_listener();
         _set_status("failed");
         return status;
       } else if (_result == "interrupted") {
@@ -178,6 +221,7 @@ function GOAP_Executor() constructor {
         active_strategy.stop(_ctx, "interrupted");
         _release_reservations();
         active_strategy = undefined;
+        _detach_memory_listener();
         _set_status("interrupted");
         return status;
       } else {
@@ -186,6 +230,7 @@ function GOAP_Executor() constructor {
         active_strategy.stop(_ctx, "invalid_result");
         _release_reservations();
         active_strategy = undefined;
+        _detach_memory_listener();
         _set_status("failed");
         return status;
       }
@@ -215,12 +260,14 @@ function GOAP_Executor() constructor {
       active_strategy = undefined;
     }
     _release_reservations();
+    _detach_memory_listener();
     _set_status("interrupted");
   };
 
   clear_plan_invalidated = function() {
     plan_invalidated = false;
     _last_invalidate_reason = undefined;
+    _plan_stale = false;
   };
 
   was_plan_invalidated = function() {
@@ -324,7 +371,80 @@ function GOAP_Executor() constructor {
     _expected_duration = undefined;
   };
 
+  _ensure_memory_listener = function() {
+    if (is_undefined(_memory)) {
+      return;
+    }
+
+    if (is_undefined(_mem_listener)) {
+      var _executor_ref = self;
+      _mem_listener = function(_key, _old_bit, _new_bit) {
+        if (is_undefined(_executor_ref.plan_ref)) {
+          return;
+        }
+        if (!is_undefined(_executor_ref._relevant_keys)) {
+          var _k = string(_key);
+          if (!variable_struct_exists(_executor_ref._relevant_keys, _k)) {
+            return;
+          }
+        }
+        _executor_ref._plan_stale = true;
+      };
+    }
+
+    if (_mem_listener_attached) {
+      return;
+    }
+
+    var _has_add = false;
+    if (!is_undefined(_memory) && variable_struct_exists(_memory, "add_listener")) {
+      var _add = _memory.add_listener;
+      if (is_function(_add) || is_method(_memory, "add_listener")) {
+        _memory.add_listener(_mem_listener);
+        _mem_listener_attached = true;
+        _mem_listener_mode = "collection";
+        _has_add = true;
+      }
+    }
+
+    if (!_has_add) {
+      if (!is_undefined(_memory)) {
+        _memory.on_bit_changed = _mem_listener;
+        _mem_listener_attached = true;
+        _mem_listener_mode = "legacy";
+      }
+    }
+  };
+
+  _detach_memory_listener = function() {
+    if (!_mem_listener_attached) {
+      return;
+    }
+    if (is_undefined(_memory)) {
+      _mem_listener_attached = false;
+      _mem_listener_mode = undefined;
+      return;
+    }
+
+    if (_mem_listener_mode == "collection") {
+      if (variable_struct_exists(_memory, "remove_listener")) {
+        var _rem = _memory.remove_listener;
+        if (is_function(_rem) || is_method(_memory, "remove_listener")) {
+          _memory.remove_listener(_mem_listener);
+        }
+      }
+    } else if (_mem_listener_mode == "legacy") {
+      if (variable_struct_exists(_memory, "on_bit_changed") && _memory.on_bit_changed == _mem_listener) {
+        _memory.on_bit_changed = undefined;
+      }
+    }
+
+    _mem_listener_attached = false;
+    _mem_listener_mode = undefined;
+  };
+
   _invalidate_plan = function(_reason, _ctx) {
+    _plan_stale = false;
     if (!plan_invalidated) {
       plan_invalidated = true;
       _last_invalidate_reason = _reason;

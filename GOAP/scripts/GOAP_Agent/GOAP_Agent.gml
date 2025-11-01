@@ -9,6 +9,7 @@ function GOAP_Agent() constructor {
   world = undefined;             // external world reference
   blackboard = undefined;        // shared blackboard
   reservation_bus = undefined;   // shared reservation coordination map
+  sensor_hub = undefined;
 
   // Agent knowledge
   beliefs = [];                  // array or map of GOAP_Belief
@@ -29,6 +30,10 @@ function GOAP_Agent() constructor {
     planning_period: 1           // ticks
   };
 
+  if (is_undefined(reservation_bus)) {
+    reservation_bus = {};
+  }
+
   // Internal timers
   _next_perception_tick = 0;
   _next_planning_tick = 0;
@@ -40,6 +45,14 @@ function GOAP_Agent() constructor {
     executor = _executor_optional; // may be undefined; executor not used here
     if (argument_count > 3) { world = _world_optional; }
     if (argument_count > 4) { blackboard = _blackboard_optional; }
+    if (is_undefined(sensor_hub)) {
+      sensor_hub = new GOAP_SensorHub(self, world, blackboard, memory);
+    } else {
+      sensor_hub._agent = self;
+      sensor_hub._world = world;
+      sensor_hub._blackboard = blackboard;
+      sensor_hub._memory = memory;
+    }
     return self;
   };
 
@@ -110,6 +123,9 @@ function GOAP_Agent() constructor {
   tick = function(_dt) {
     if (is_undefined(_dt)) { _dt = 0; }
     if (is_undefined(memory)) { return; }
+    if (!is_undefined(sensor_hub)) {
+      sensor_hub.tick(_dt);
+    }
     var _now = memory._now();
 
     if (_now >= _next_perception_tick) {

@@ -28,6 +28,8 @@ function GOAP_Memory() constructor {
     data        = {};
     subs        = {};
     update_tick = 0;
+    on_bit_changed = undefined;
+    _global_listeners = [];
 
     static DEBUG_ENABLED = function() {
         if (variable_global_exists("GOAP_DEBUG")) return bool(global.GOAP_DEBUG);
@@ -58,6 +60,22 @@ function GOAP_Memory() constructor {
     tick = function() { update_tick += 1; };
     _now = function() { return update_tick; };
 
+    add_listener = function(_fn) {
+        if (is_undefined(_fn)) return;
+        if (!(is_function(_fn) || is_method(_fn))) return;
+        if (array_get_index(_global_listeners, _fn) < 0) {
+            array_push(_global_listeners, _fn);
+        }
+    };
+
+    remove_listener = function(_fn) {
+        if (array_length(_global_listeners) == 0) return;
+        var _idx = array_get_index(_global_listeners, _fn);
+        if (_idx >= 0) {
+            array_delete(_global_listeners, _idx, 1);
+        }
+    };
+
     _ensure_bit = function(_key, _default_value = undefined) {
         if (!variable_struct_exists(data, _key)) {
             var _bit = new GOAP_MemoryBit(_default_value);
@@ -78,16 +96,33 @@ function GOAP_Memory() constructor {
         return variable_struct_get(subs, _key);
     };
 
-    _notify = function(_key, _bit) {
-        if (!variable_struct_exists(subs, _key)) return;
-        var _arr = variable_struct_get(subs, _key);
-        var _n = array_length(_arr);
-        for (var i = 0; i < _n; i++) {
-            var _listener = _arr[i];
-            if (is_undefined(_listener)) continue;
-            debug_guard(is_method(_listener, "on_memory_update"), "Listener missing on_memory_update for key '" + string(_key) + "'");
-            if (is_method(_listener, "on_memory_update")) {
-                _listener.on_memory_update(_listener, _key, _bit.value, _bit.dirty, _bit.last_updated);
+    _notify = function(_key, _bit, _old_snapshot, _new_snapshot) {
+        if (variable_struct_exists(subs, _key)) {
+            var _arr = variable_struct_get(subs, _key);
+            var _n = array_length(_arr);
+            for (var i = 0; i < _n; i++) {
+                var _listener = _arr[i];
+                if (is_undefined(_listener)) continue;
+                debug_guard(is_method(_listener, "on_memory_update"), "Listener missing on_memory_update for key '" + string(_key) + "'");
+                if (is_method(_listener, "on_memory_update")) {
+                    _listener.on_memory_update(_listener, _key, _bit.value, _bit.dirty, _bit.last_updated);
+                }
+            }
+        }
+        _notify_global(_key, _old_snapshot, _new_snapshot);
+    };
+
+    _notify_global = function(_key, _old_snapshot, _new_snapshot) {
+        if (is_function(on_bit_changed) || is_method(on_bit_changed)) {
+            on_bit_changed(_key, _old_snapshot, _new_snapshot);
+        }
+
+        var _len = array_length(_global_listeners);
+        for (var i = 0; i < _len; ++i) {
+            var _fn = _global_listeners[i];
+            if (is_undefined(_fn)) continue;
+            if (is_function(_fn) || is_method(_fn)) {
+                _fn(_key, _old_snapshot, _new_snapshot);
             }
         }
     };
@@ -104,7 +139,9 @@ function GOAP_Memory() constructor {
     };
 
     write = function(_key, _value, _opts = undefined) {
+        var _had_bit = variable_struct_exists(data, _key);
         var _bit = _ensure_bit(_key);
+        var _old_snapshot = _had_bit ? _bit.as_struct() : undefined;
         var _force = false;
         if (is_struct(_opts) && variable_struct_exists(_opts, "force_dirty")) {
             _force = _opts.force_dirty;
@@ -126,20 +163,29 @@ function GOAP_Memory() constructor {
                 _bit.confidence = _conf;
             }
 
-            _notify(_key, _bit);
+            var _new_snapshot = _bit.as_struct();
+            _notify(_key, _bit, _old_snapshot, _new_snapshot);
         } else {
             var _mark = _now();
             _bit.last_updated = _mark;
         }
     };
 
+    set = function(_key, _value, _source = undefined, _confidence = 1.0) {
+        var _opts = make_write_options(_source, _confidence, true);
+        write(_key, _value, _opts);
+    };
+
     mark_dirty = function(_key) {
+        var _had_bit = variable_struct_exists(data, _key);
         var _bit = _ensure_bit(_key);
+        var _old_snapshot = _had_bit ? _bit.as_struct() : undefined;
         var _stamp = _now();
         _bit.dirty        = true;
         _bit.last_updated = _stamp;
         _bit.version     += 1;
-        _notify(_key, _bit);
+        var _new_snapshot = _bit.as_struct();
+        _notify(_key, _bit, _old_snapshot, _new_snapshot);
     };
 
     mark_clean = function(_key) {
