@@ -15,6 +15,15 @@ function GOAP_Executor() constructor {
   _blackboard = undefined;
   _memory = undefined;
 
+  _set_status = function(_new) {
+    if (status != _new) {
+      #if DEBUG
+      show_debug_message("[GOAP_Executor] " + string(status) + " -> " + string(_new));
+      #endif
+      status = _new;
+    }
+  };
+
   // --- Public API ---
 
   start = function(_plan, _agent_ref, _world_ref, _bb_ref, _mem_ref) {
@@ -27,15 +36,24 @@ function GOAP_Executor() constructor {
     step_index = -1;
     active_strategy = undefined;
     elapsed_in_step = 0;
-    status = "starting";
+    _set_status("starting");
 
     // Advance immediately to first action
-    return _advance_to_next_action();
+    if (_advance_to_next_action()) {
+      return true;
+    }
+
+    _set_status("finished");
+    return false;
   };
 
   tick = function(_dt) {
     // Deterministic: caller supplies dt. No direct time reads here.
-    if (status == "finished" || status == "failed" || status == "interrupted" || plan_ref == undefined) {
+    if (plan_ref == undefined) {
+      return status;
+    }
+
+    if (status == "finished" || status == "failed" || status == "interrupted") {
       return status;
     }
 
@@ -43,16 +61,31 @@ function GOAP_Executor() constructor {
     if (status == "starting" && is_undefined(active_strategy)) {
       if (!_advance_to_next_action()) {
         // No more actions -> finished
-        status = "finished";
+        _set_status("finished");
         return status;
       }
     }
 
     if (status == "running") {
       // Update current action
-      elapsed_in_step += _dt;
+      if (is_undefined(active_strategy)) {
+        _set_status("failed");
+        return status;
+      }
 
       var _ctx = _make_context();
+
+      var _ok = active_strategy.invariant_check(_ctx);
+      if (is_undefined(_ok) || !_ok) {
+        _set_status("stopping");
+        active_strategy.stop(_ctx, "invariant_fail");
+        active_strategy = undefined;
+        _set_status("interrupted");
+        return status;
+      }
+
+      elapsed_in_step += _dt;
+      _ctx = _make_context();
       // Runtime-only: Strategy drives lifecycles
       var _result = active_strategy.update(_ctx, _dt);
 
@@ -64,36 +97,51 @@ function GOAP_Executor() constructor {
         return status; // keep going
       } else if (_result == "success") {
         // Cleanly stop and advance
-        status = "stopping";
+        _set_status("stopping");
         active_strategy.stop(_ctx, "success");
         active_strategy = undefined;
         elapsed_in_step = 0;
 
-        // Move to next action or finish
-        if (!_advance_to_next_action()) {
-          status = "finished";
+        var _has_next = false;
+        if (plan_ref != undefined && is_struct(plan_ref) && variable_struct_exists(plan_ref, "actions")) {
+          var _actions = plan_ref.actions;
+          if (is_array(_actions)) {
+            var _next_index = step_index + 1;
+            if (_next_index < array_length(_actions)) {
+              _has_next = true;
+            }
+          }
+        }
+
+        if (_has_next) {
+          _set_status("starting");
+          if (!_advance_to_next_action()) {
+            _set_status("finished");
+          }
+        } else {
+          _set_status("finished");
         }
         return status;
       } else if (_result == "failed") {
         // Stop and mark failed
-        status = "stopping";
+        _set_status("stopping");
         active_strategy.stop(_ctx, "failed");
         active_strategy = undefined;
-        status = "failed";
+        _set_status("failed");
         return status;
       } else if (_result == "interrupted") {
         // Stop and mark interrupted
-        status = "stopping";
+        _set_status("stopping");
         active_strategy.stop(_ctx, "interrupted");
         active_strategy = undefined;
-        status = "interrupted";
+        _set_status("interrupted");
         return status;
       } else {
         // Defensive: treat unknown as failure
-        status = "stopping";
+        _set_status("stopping");
         active_strategy.stop(_ctx, "invalid_result");
         active_strategy = undefined;
-        status = "failed";
+        _set_status("failed");
         return status;
       }
     }
@@ -116,32 +164,35 @@ function GOAP_Executor() constructor {
   };
 
   interrupt = function(_reason) {
-    if (plan_ref == undefined) {
-      status = "interrupted";
-      return;
-    }
     var _ctx = _make_context();
     if (!is_undefined(active_strategy)) {
       active_strategy.stop(_ctx, string(_reason));
       active_strategy = undefined;
     }
-    status = "interrupted";
+    _set_status("interrupted");
   };
 
   // --- Internals ---
 
   _advance_to_next_action = function() {
-    if (plan_ref == undefined) return false;
-    if (!is_struct(plan_ref) || !variable_struct_exists(plan_ref, "actions")) return false;
+    if (plan_ref == undefined) {
+      active_strategy = undefined;
+      return false;
+    }
+    if (!is_struct(plan_ref) || !variable_struct_exists(plan_ref, "actions")) {
+      active_strategy = undefined;
+      return false;
+    }
 
     var _actions = plan_ref.actions;
-    if (!is_array(_actions)) return false;
+    if (!is_array(_actions)) {
+      active_strategy = undefined;
+      return false;
+    }
 
     step_index += 1;
     if (step_index >= array_length(_actions)) {
-      // No more actions
       active_strategy = undefined;
-      status = "finished";
       return false;
     }
 
@@ -153,7 +204,7 @@ function GOAP_Executor() constructor {
 
     // Start the action
     var _ctx = _make_context();
-    status = "running";
+    _set_status("running");
     // Allow start to set up resources; it returns void
     active_strategy.start(_ctx);
 
