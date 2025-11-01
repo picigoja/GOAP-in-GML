@@ -32,7 +32,6 @@ function GOAP_Executor() constructor {
   logical_time = 0;               // logical clock advanced exclusively by caller-provided dt
   _rng_state = 0;                 // deterministic RNG state (uint32)
   _rng_inited = false;            // RNG initialization flag
-  _plan_stale_tick = -1;          // last logical_time when plan was marked stale
 
   // Sticky execution context (provided at start)
   _agent = undefined;
@@ -204,7 +203,6 @@ function GOAP_Executor() constructor {
     _blackboard = _bb_ref;
     _memory = _mem_ref;
     _plan_stale = false;
-    _plan_stale_tick = -1;
     _relevant_keys = undefined;
 
     if (!is_undefined(plan_ref) && is_struct(plan_ref) && variable_struct_exists(plan_ref, "meta")) {
@@ -216,53 +214,25 @@ function GOAP_Executor() constructor {
         if (variable_struct_exists(_meta, "referenced_keys")) {
           var _rk_source = _meta.referenced_keys;
           var _rk_list = [];
-          var _rk_lookup = undefined;
           if (is_array(_rk_source)) {
             _rk_list = _rk_source;
           } else if (is_struct(_rk_source)) {
-            if (variable_struct_exists(_rk_source, "list") || variable_struct_exists(_rk_source, "lookup")) {
-              if (variable_struct_exists(_rk_source, "list") && is_array(_rk_source.list)) {
-                _rk_list = _rk_source.list;
-              }
-              if (variable_struct_exists(_rk_source, "lookup") && is_struct(_rk_source.lookup)) {
-                _rk_lookup = _rk_source.lookup;
-              }
-            } else {
-              _rk_lookup = _rk_source;
-            }
+            _rk_list = variable_struct_get_names(_rk_source);
           }
-          if (is_undefined(_rk_lookup) && is_array(_rk_list)) {
-            var _tmp_lookup = {};
-            var _tmp_inserted = false;
+          if (is_array(_rk_list)) {
+            var _candidate_keys = {};
+            var _inserted = false;
             for (var _i = 0; _i < array_length(_rk_list); ++_i) {
               var _rk_value = _rk_list[_i];
               if (is_undefined(_rk_value)) {
                 continue;
               }
-              var _candidate_name = string(_rk_value);
-              if (_candidate_name == "") {
+              var _key_name = string(_rk_value);
+              if (_key_name == "") {
                 continue;
               }
-              if (!variable_struct_exists(_tmp_lookup, _candidate_name)) {
-                _tmp_lookup[$ _candidate_name] = true;
-                _tmp_inserted = true;
-              }
-            }
-            if (_tmp_inserted) {
-              _rk_lookup = _tmp_lookup;
-            }
-          }
-          if (is_struct(_rk_lookup)) {
-            var _candidate_keys = {};
-            var _names = variable_struct_get_names(_rk_lookup);
-            var _inserted = false;
-            for (var _ni = 0; _ni < array_length(_names); ++_ni) {
-              var _name = string(_names[_ni]);
-              if (_name == "") {
-                continue;
-              }
-              if (!variable_struct_exists(_candidate_keys, _name)) {
-                _candidate_keys[$ _name] = true;
+              if (!variable_struct_exists(_candidate_keys, _key_name)) {
+                _candidate_keys[$ _key_name] = true;
                 _inserted = true;
               }
             }
@@ -1042,7 +1012,6 @@ function GOAP_Executor() constructor {
     plan_invalidated = false;
     _last_invalidate_reason = undefined;
     _plan_stale = false;
-    _plan_stale_tick = -1;
   };
 
   was_plan_invalidated = function() {
@@ -1191,18 +1160,10 @@ function GOAP_Executor() constructor {
           return;
         }
         var _keys = _executor_ref._relevant_keys;
-        var _key_name = string(_key);
-        if (_key_name == "") {
-          return;
-        }
-        if (!is_undefined(_keys) && !variable_struct_exists(_keys, _key_name)) {
-          return;
-        }
-        if (_executor_ref._plan_stale && _executor_ref._plan_stale_tick == _executor_ref.logical_time) {
+        if (!is_undefined(_keys) && !variable_struct_exists(_keys, string(_key))) {
           return;
         }
         _executor_ref._plan_stale = true;
-        _executor_ref._plan_stale_tick = _executor_ref.logical_time;
       };
     }
 
@@ -1259,7 +1220,6 @@ function GOAP_Executor() constructor {
 
   _invalidate_plan = function(_reason, _ctx) {
     _plan_stale = false;
-    _plan_stale_tick = -1;
     if (!plan_invalidated) {
       plan_invalidated = true;
       _last_invalidate_reason = _reason;

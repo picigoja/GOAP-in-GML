@@ -48,19 +48,8 @@ function Animus_Core() constructor {
         Animus_Core.assert(has_meta && is_struct(plan.meta), label + " expected plan.meta struct");
         if (has_meta && variable_struct_exists(plan.meta, "referenced_keys")) {
             var keys_ref = plan.meta.referenced_keys;
-            var valid_keys = false;
-            if (is_array(keys_ref)) {
-                valid_keys = true;
-            } else if (is_struct(keys_ref)) {
-                if (variable_struct_exists(keys_ref, "list") || variable_struct_exists(keys_ref, "lookup")) {
-                    var list_ok = !variable_struct_exists(keys_ref, "list") || is_array(keys_ref.list);
-                    var lookup_ok = !variable_struct_exists(keys_ref, "lookup") || is_struct(keys_ref.lookup);
-                    valid_keys = list_ok && lookup_ok;
-                } else {
-                    valid_keys = true;
-                }
-            }
-            Animus_Core.assert(valid_keys, label + " expected meta.referenced_keys array or {list,lookup} struct");
+            var valid_keys = is_array(keys_ref) || is_struct(keys_ref);
+            Animus_Core.assert(valid_keys, label + " expected meta.referenced_keys array or struct");
         }
     };
 
