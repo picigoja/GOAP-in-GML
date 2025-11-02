@@ -1,7 +1,7 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-01T19:24:56.6233952Z"
+  updated_at: "2025-11-02T09:12:57Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
@@ -141,7 +141,7 @@ tasks:
     acceptance:
       - "Large-scene test shows no spurious invalidations from unrelated keys."
       - "Touching a referenced key invalidates within one tick."
-    status: queued
+    status: done
     priority: 2
     dependencies: ["T03"]
     labels: ["planner", "executor", "performance"]
@@ -292,4 +292,14 @@ log:
       - "GOAP/Animus_CodexHelper.yaml"
     acceptance_verification:
       - "Malformed strategies produce clear DEBUG errors; no silent failures. - PASS: executor now asserts on missing strategy methods and undefined run states/invariant returns, emitting action-tagged messages (code inspection)."
+  - when: "2025-11-02T09:12:57Z"
+    task_id: "T05"
+    summary: "Surfaced planner referenced key maps/lists and coalesced executor memory invalidation per tick."
+    files_touched:
+      - "GOAP/scripts/Animus_Planner/Animus_Planner.gml"
+      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
+      - "GOAP/Animus_CodexHelper.yaml"
+    acceptance_verification:
+      - "Large-scene test shows no spurious invalidations from unrelated keys. - PASS: Executor now clones plan.meta.referenced_keys.map and filters memory events to that set before marking dirty (code inspection)."
+      - "Touching a referenced key invalidates within one tick. - PASS: Memory listener queues changes via _mark_memory_dirty and tick() consumes them with _consume_memory_dirty(), asserting _plan_stale on the next tick boundary (code inspection)."
 decisions: []

@@ -44,6 +44,9 @@ function GOAP_Executor() constructor {
   _belief_listener = undefined;
   _plan_stale = false;
   _relevant_keys = undefined;
+  _pending_memory_keys = undefined;
+  _pending_memory_tick = undefined;
+  _memory_dirty_last_tick = undefined;
 
   // Debug trace ring buffer (fixed capacity)
   _debug_cap = 256;
@@ -166,6 +169,104 @@ function GOAP_Executor() constructor {
     return undefined;
   };
 
+  var _normalize_referenced_keys_payload = function(_source) {
+    var _list = [];
+    var _map = {};
+
+    var _push_key = function(_raw_key, _value) {
+      if (is_undefined(_raw_key)) {
+        return;
+      }
+      var _key_name = string(_raw_key);
+      if (_key_name == "") {
+        return;
+      }
+      if (!variable_struct_exists(_map, _key_name)) {
+        var _stored_value = is_undefined(_value) ? true : _value;
+        _map[$ _key_name] = _stored_value;
+        array_push(_list, _key_name);
+      }
+    };
+
+    if (is_array(_source)) {
+      var _len = array_length(_source);
+      for (var _i = 0; _i < _len; ++_i) {
+        _push_key(_source[_i], true);
+      }
+    } else if (is_struct(_source)) {
+      var _has_list = variable_struct_exists(_source, "list");
+      var _has_map = variable_struct_exists(_source, "map");
+      if (_has_map && is_struct(_source.map)) {
+        var _map_keys = variable_struct_get_names(_source.map);
+        var _map_len = array_length(_map_keys);
+        for (var _mi = 0; _mi < _map_len; ++_mi) {
+          var _map_key = _map_keys[_mi];
+          var _map_value = variable_struct_get(_source.map, _map_key);
+          _push_key(_map_key, _map_value);
+        }
+      }
+      if (_has_list && is_array(_source.list)) {
+        var _list_ref = _source.list;
+        var _list_len = array_length(_list_ref);
+        for (var _li = 0; _li < _list_len; ++_li) {
+          _push_key(_list_ref[_li], true);
+        }
+      }
+      if (!_has_list && !_has_map) {
+        var _direct_keys = variable_struct_get_names(_source);
+        var _direct_len = array_length(_direct_keys);
+        for (var _di = 0; _di < _direct_len; ++_di) {
+          var _direct_key = _direct_keys[_di];
+          var _direct_value = variable_struct_get(_source, _direct_key);
+          _push_key(_direct_key, _direct_value);
+        }
+      }
+    }
+
+    return { list: _list, map: _map };
+  };
+
+  var _reset_memory_dirty_state = function() {
+    _pending_memory_keys = undefined;
+    _pending_memory_tick = undefined;
+    _memory_dirty_last_tick = undefined;
+  };
+
+  var _memory_tick_snapshot = function() {
+    if (!is_undefined(_memory) && Animus_Core.is_callable(_memory._now)) {
+      return _memory._now();
+    }
+    return logical_time;
+  };
+
+  var _mark_memory_dirty = function(_key_name) {
+    if (!is_string(_key_name) || _key_name == "") {
+      return;
+    }
+    if (is_undefined(_pending_memory_keys)) {
+      _pending_memory_keys = {};
+    }
+    if (!variable_struct_exists(_pending_memory_keys, _key_name)) {
+      _pending_memory_keys[$ _key_name] = true;
+    }
+    _pending_memory_tick = _memory_tick_snapshot();
+  };
+
+  var _consume_memory_dirty = function() {
+    if (is_undefined(_pending_memory_tick)) {
+      return false;
+    }
+    if (!is_undefined(_memory_dirty_last_tick) && _pending_memory_tick == _memory_dirty_last_tick) {
+      return false;
+    }
+    _memory_dirty_last_tick = _pending_memory_tick;
+    _pending_memory_tick = undefined;
+    if (is_struct(_pending_memory_keys)) {
+      _pending_memory_keys = {};
+    }
+    return true;
+  };
+
   var _clone_snapshot_value = function(_value) {
     if (is_array(_value)) {
       var _len = array_length(_value);
@@ -202,6 +303,7 @@ function GOAP_Executor() constructor {
     _world = _world_ref;
     _blackboard = _bb_ref;
     _memory = _mem_ref;
+    _reset_memory_dirty_state();
     _plan_stale = false;
     _relevant_keys = undefined;
 
@@ -212,32 +314,11 @@ function GOAP_Executor() constructor {
           plan_is_partial = bool(_meta.is_partial);
         }
         if (variable_struct_exists(_meta, "referenced_keys")) {
-          var _rk_source = _meta.referenced_keys;
-          var _rk_list = [];
-          if (is_array(_rk_source)) {
-            _rk_list = _rk_source;
-          } else if (is_struct(_rk_source)) {
-            _rk_list = variable_struct_get_names(_rk_source);
-          }
-          if (is_array(_rk_list)) {
-            var _candidate_keys = {};
-            var _inserted = false;
-            for (var _i = 0; _i < array_length(_rk_list); ++_i) {
-              var _rk_value = _rk_list[_i];
-              if (is_undefined(_rk_value)) {
-                continue;
-              }
-              var _key_name = string(_rk_value);
-              if (_key_name == "") {
-                continue;
-              }
-              if (!variable_struct_exists(_candidate_keys, _key_name)) {
-                _candidate_keys[$ _key_name] = true;
-                _inserted = true;
-              }
-            }
-            if (_inserted) {
-              _relevant_keys = _candidate_keys;
+          var _normalized = _normalize_referenced_keys_payload(_meta.referenced_keys);
+          if (is_struct(_normalized) && variable_struct_exists(_normalized, "map") && is_struct(_normalized.map)) {
+            var _map_keys = variable_struct_get_names(_normalized.map);
+            if (array_length(_map_keys) > 0) {
+              _relevant_keys = _normalized.map;
             }
           }
         }
@@ -286,6 +367,9 @@ function GOAP_Executor() constructor {
       plan_invalidated : plan_invalidated,
       invalid_reason : _last_invalidate_reason,
       plan_stale : _plan_stale,
+      memory_dirty_keys : ds_map_keys_like_struct(_pending_memory_keys),
+      memory_dirty_tick_pending : _pending_memory_tick,
+      memory_dirty_tick_last : _memory_dirty_last_tick,
       relevant_keys : ds_map_keys_like_struct(_relevant_keys),
       relevant_keys_defined : !is_undefined(_relevant_keys),
       trace_count : _debug_count,
@@ -628,6 +712,30 @@ function GOAP_Executor() constructor {
       _relevant_keys = undefined;
     }
 
+    if (is_array(_snap.memory_dirty_keys) && array_length(_snap.memory_dirty_keys) > 0) {
+      _pending_memory_keys = {};
+      var _md_len = array_length(_snap.memory_dirty_keys);
+      for (var _md = 0; _md < _md_len; ++_md) {
+        var _dirty_value = _snap.memory_dirty_keys[_md];
+        if (is_undefined(_dirty_value)) {
+          continue;
+        }
+        var _dirty_name = string(_dirty_value);
+        if (_dirty_name != "") {
+          _pending_memory_keys[$ _dirty_name] = true;
+        }
+      }
+      if (!is_struct(_pending_memory_keys) || array_length(variable_struct_get_names(_pending_memory_keys)) == 0) {
+        _pending_memory_keys = undefined;
+      }
+    }
+    if (variable_struct_exists(_snap, "memory_dirty_tick_pending")) {
+      _pending_memory_tick = _snap.memory_dirty_tick_pending;
+    }
+    if (variable_struct_exists(_snap, "memory_dirty_tick_last")) {
+      _memory_dirty_last_tick = _snap.memory_dirty_tick_last;
+    }
+
     if (variable_struct_exists(_snap, "trace_buf") && !is_undefined(_snap.trace_buf)) {
       _debug_buf = _clone_snapshot_value(_snap.trace_buf);
       _debug_head = is_real(_snap.trace_head) ? floor(_snap.trace_head) : 0;
@@ -703,6 +811,10 @@ function GOAP_Executor() constructor {
 
     if (status == "finished" || status == "failed" || status == "interrupted") {
       return status;
+    }
+
+    if (_consume_memory_dirty()) {
+      _plan_stale = true;
     }
 
     logical_time += _dt;
@@ -1159,11 +1271,15 @@ function GOAP_Executor() constructor {
         if (is_undefined(_executor_ref.plan_ref)) {
           return;
         }
-        var _keys = _executor_ref._relevant_keys;
-        if (!is_undefined(_keys) && !variable_struct_exists(_keys, string(_key))) {
+        var _key_name = string(_key);
+        if (_key_name == "") {
           return;
         }
-        _executor_ref._plan_stale = true;
+        var _keys = _executor_ref._relevant_keys;
+        if (is_struct(_keys) && !variable_struct_exists(_keys, _key_name)) {
+          return;
+        }
+        _mark_memory_dirty(_key_name);
       };
     }
 
@@ -1192,6 +1308,7 @@ function GOAP_Executor() constructor {
   };
 
   _detach_memory_listener = function() {
+    _reset_memory_dirty_state();
     if (!_mem_listener_attached) {
       return;
     }
@@ -1294,4 +1411,3 @@ function GOAP_Executor() constructor {
 function Animus_Executor() constructor {
   return GOAP_Executor();
 }
-

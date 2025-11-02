@@ -125,6 +125,68 @@ function Animus_Planner() constructor {
         }
     };
 
+    var summarize_referenced_keys = function(source) {
+        var keys_list = [];
+        var keys_map = {};
+
+        var push_key = function(raw_key, value) {
+            if (is_undefined(raw_key)) {
+                return;
+            }
+            var key_name = string(raw_key);
+            if (key_name == "") {
+                return;
+            }
+            if (!variable_struct_exists(keys_map, key_name)) {
+                var stored_value = is_undefined(value) ? true : value;
+                keys_map[$ key_name] = stored_value;
+                array_push(keys_list, key_name);
+            }
+        };
+
+        if (is_array(source)) {
+            var list_len = array_length(source);
+            for (var li = 0; li < list_len; ++li) {
+                push_key(source[li], true);
+            }
+        } else if (is_struct(source)) {
+            var has_list = variable_struct_exists(source, "list");
+            var has_map = variable_struct_exists(source, "map");
+            if (has_list && is_array(source.list)) {
+                var list_ref = source.list;
+                var list_count = array_length(list_ref);
+                for (var lj = 0; lj < list_count; ++lj) {
+                    var list_key = list_ref[lj];
+                    var list_value = true;
+                    if (has_map && is_struct(source.map) && variable_struct_exists(source.map, list_key)) {
+                        list_value = variable_struct_get(source.map, list_key);
+                    }
+                    push_key(list_key, list_value);
+                }
+            }
+            if (has_map && is_struct(source.map)) {
+                var map_keys = variable_struct_get_names(source.map);
+                var map_len = array_length(map_keys);
+                for (var mi = 0; mi < map_len; ++mi) {
+                    var map_key = map_keys[mi];
+                    var map_value = variable_struct_get(source.map, map_key);
+                    push_key(map_key, map_value);
+                }
+            }
+            if (!has_list && !has_map) {
+                var direct_keys = variable_struct_get_names(source);
+                var direct_len = array_length(direct_keys);
+                for (var di = 0; di < direct_len; ++di) {
+                    var direct_key = direct_keys[di];
+                    var direct_value = variable_struct_get(source, direct_key);
+                    push_key(direct_key, direct_value);
+                }
+            }
+        }
+
+        return { list: keys_list, map: keys_map };
+    };
+
     var generate_plan_struct = function(goal, actions, cost, meta) {
         var plan_struct = {
             goal: goal,
@@ -164,11 +226,9 @@ function Animus_Planner() constructor {
         }
         var keys = [];
         if (variable_struct_exists(meta, "referenced_keys")) {
-            var source = meta.referenced_keys;
-            if (is_array(source)) {
-                keys = source;
-            } else if (is_struct(source)) {
-                keys = variable_struct_get_names(source);
+            var summary = summarize_referenced_keys(meta.referenced_keys);
+            if (is_struct(summary) && variable_struct_exists(summary, "list")) {
+                keys = summary.list;
             }
         }
         var built_at_tick = variable_struct_exists(meta, "built_at_tick") ? meta.built_at_tick : -1;
@@ -418,18 +478,18 @@ function Animus_Planner() constructor {
             var goal = entry.goal;
 
             if (goal.matches_state(initial_state)) {
+                var empty_summary = summarize_referenced_keys(referenced_keys);
                 var meta = {
                     built_at_tick: memory_tick,
                     elapsed_ms: current_time - start_time,
                     nodes_expanded: 0,
                     nodes_generated: 0,
                     open_peak: 0,
-                    referenced_keys: variable_struct_get_names(referenced_keys),
+                    referenced_keys: empty_summary,
                     is_partial: false,
                     budget: { nodes: config.max_expansions, ms: config.time_budget_ms },
                     reason: undefined
                 };
-                meta.referenced_keys = variable_struct_get_names(referenced_keys);
                 var empty_plan = generate_plan_struct(goal, [], 0, meta);
                 last_plan = empty_plan;
                 return empty_plan;
@@ -449,13 +509,14 @@ function Animus_Planner() constructor {
                 continue;
             }
 
+            var summary = summarize_referenced_keys(referenced_keys);
             var meta = {
                 built_at_tick: memory_tick,
                 elapsed_ms: current_time - start_time,
                 nodes_expanded: search_result.nodes_expanded,
                 nodes_generated: search_result.nodes_generated,
                 open_peak: search_result.open_peak,
-                referenced_keys: variable_struct_get_names(referenced_keys),
+                referenced_keys: summary,
                 is_partial: search_result.is_partial,
                 budget: { nodes: config.max_expansions, ms: config.time_budget_ms },
                 reason: search_result.reason
