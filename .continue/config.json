@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/continuedev/continue/main/website/static/config-schema.json",
+  "models": [
+    {
+      "title": "Qwen2.5-Coder 14B (Ollama)",
+      "provider": "ollama",
+      "model": "qwen2.5-coder:14b"
+    },
+    {
+      "title": "Qwen2.5-Coder 7B (Ollama)",
+      "provider": "ollama",
+      "model": "qwen2.5-coder:7b"
+    }
+  ],
+  "tabAutocompleteModel": {
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b"
+  },
+  "systemMessage": "You are a careful code assistant working on a GML codebase. Follow the project rules in AI_PROJECT_RULES.md. Preserve behavior. Propose small, correct diffs. When unsure, request the specific file(s) to read.",
+  "contextProviders": [
+    {
+      "name": "repo",
+      "params": {
+        "maxTokens": 16000,
+        "include": [
+          "src/**",
+          "scripts/**",
+          "objects/**",
+          "tests/**",
+          "README.md",
+          "AI_PROJECT_RULES.md"
+        ],
+        "exclude": [
+          "**/.git/**",
+          "**/node_modules/**",
+          "**/build/**",
+          "**/_out/**"
+        ]
+      }
+    },
+    { "name": "filetree" },
+    { "name": "terminal" },
+    { "name": "openpr" }
+  ],
+  "allowAnonymousTelemetry": false
+}
