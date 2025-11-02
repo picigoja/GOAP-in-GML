@@ -3,7 +3,7 @@
   "%Name": "GOAP_Component",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Component",
+  "name": "_Animus_Component",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

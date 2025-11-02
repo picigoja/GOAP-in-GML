@@ -3,7 +3,7 @@
   "%Name": "GOAP_Planner",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Planner",
+  "name": "Animus_Planner",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

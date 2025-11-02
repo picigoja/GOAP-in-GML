@@ -3,7 +3,7 @@
   "%Name": "GOAP_Executor",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Executor",
+  "name": "Animus_Executor",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

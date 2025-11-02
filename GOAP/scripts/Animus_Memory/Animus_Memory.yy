@@ -3,7 +3,7 @@
   "%Name": "GOAP_Memory",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Memory",
+  "name": "Animus_Memory",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

@@ -3,7 +3,7 @@
   "%Name": "GOAP_Agent",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Agent",
+  "name": "Animus_Agent",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

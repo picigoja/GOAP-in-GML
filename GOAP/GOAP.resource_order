@@ -19,3 +19,20 @@
     {"name": "GOAP_SensorHub", "order": 16, "path": "scripts/Animus_SensorHub/Animus_SensorHub.yy"}
   ]
 }
+
+scripts/Animus_Action/Animus_Action.yy
+scripts/Animus_ActionStrategy/Animus_ActionStrategy.yy
+scripts/Animus_Agent/Animus_Agent.yy
+scripts/Animus_Belief/Animus_Belief.yy
+scripts/Animus_Core/Animus_Core.yy
+scripts/Animus_Debug/Animus_Debug.yy
+scripts/Animus_Executor/Animus_Executor.yy
+scripts/Animus_Goal/Animus_Goal.yy
+scripts/Animus_Memory/Animus_Memory.yy
+scripts/Animus_Plan/Animus_Plan.yy
+scripts/Animus_Planner/Animus_Planner.yy
+scripts/Animus_Predicate/Animus_Predicate.yy
+scripts/Animus_RunState/Animus_RunState.yy
+scripts/Animus_Sensor/Animus_Sensor.yy
+scripts/Animus_SensorHub/Animus_SensorHub.yy
+scripts/_Animus_Component/_Animus_Component.yy

@@ -3,7 +3,7 @@
   "%Name": "GOAP_SensorHub",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_SensorHub",
+  "name": "Animus_SensorHub",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

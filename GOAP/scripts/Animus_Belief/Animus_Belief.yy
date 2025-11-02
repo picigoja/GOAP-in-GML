@@ -3,7 +3,7 @@
   "%Name": "GOAP_Belief",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Belief",
+  "name": "Animus_Belief",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

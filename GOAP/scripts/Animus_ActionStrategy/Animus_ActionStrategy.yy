@@ -3,7 +3,7 @@
   "%Name": "GOAP_ActionStrategy",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_ActionStrategy",
+  "name": "Animus_ActionStrategy",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

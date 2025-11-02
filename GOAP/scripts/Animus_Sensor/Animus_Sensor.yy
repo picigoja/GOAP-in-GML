@@ -3,7 +3,7 @@
   "%Name": "GOAP_Sensor",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Sensor",
+  "name": "Animus_Sensor",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"

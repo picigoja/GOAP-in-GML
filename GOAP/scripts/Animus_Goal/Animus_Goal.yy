@@ -3,7 +3,7 @@
   "%Name": "GOAP_Goal",
   "isCompatibility": false,
   "isDnD": false,
-  "name": "GOAP_Goal",
+  "name": "Animus_Goal",
   "parent": {
     "name": "GOAP",
     "path": "GOAP.yyp"
