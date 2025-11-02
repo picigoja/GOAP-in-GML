@@ -1,0 +1,528 @@
+{
+  "name": "AnimusInventory",
+  "modules": [
+    {
+      "name": "Animus_Core",
+      "files": ["GOAP/scripts/Animus_Core/Animus_Core.gml"],
+      "resources": ["GOAP/scripts/Animus_Core/Animus_Core.yy"],
+      "public_api": [
+        {"symbol": "Animus_Core.raise", "params": ["message", "fatal"], "returns": "undefined", "notes": "Wraps show_error with an [Animus] prefix."},
+        {"symbol": "Animus_Core.assert", "params": ["condition", "message"], "returns": "void", "notes": "Throws via raise() when the condition is false."},
+        {"symbol": "Animus_Core.is_callable", "params": ["value"], "returns": "bool", "notes": "Accepts functions or methods."},
+        {"symbol": "Animus_Core.assert_plan_shape", "params": ["plan", "context"], "returns": "void", "notes": "Validates planner output (goal/actions/meta)."},
+        {"symbol": "Animus_Core.assert_run_state", "params": ["state", "action_name"], "returns": "void", "notes": "Guards executor strategies, allowing running|success|failed|interrupted|timeout."},
+        {"symbol": "Animus_Core.pretty", "params": ["value"], "returns": "string", "notes": "Stable pretty-printer for arrays/structs."},
+        {"symbol": "Animus_Core.log", "params": ["level", "message"], "returns": "void", "notes": "Writes debug output with severity tagging."},
+        {"symbol": "GOAP_Action", "params": ["name", "preconditions", "effects", "cost"], "returns": "Animus_Action", "notes": "Compatibility alias returning Animus_Action."},
+        {"symbol": "GOAP_Goal", "params": ["name", "desired_effects", "priority"], "returns": "Animus_Goal", "notes": "Compatibility alias returning Animus_Goal."},
+        {"symbol": "GOAP_Belief", "params": ["name", "config", "evaluator"], "returns": "Animus_Belief", "notes": "Compatibility alias returning Animus_Belief."},
+        {"symbol": "GOAP_Memory", "params": [], "returns": "Animus_Memory", "notes": "Compatibility alias returning Animus_Memory."},
+        {"symbol": "GOAP_Planner", "params": [], "returns": "Animus_Planner", "notes": "Compatibility alias that asserts plan shape on reuse."}
+      ],
+      "events": [],
+      "inputs": [],
+      "outputs": [],
+      "state_keys": [],
+      "invariants": [
+        "assert_plan_shape enforces goal/actions/meta struct fields",
+        "assert_run_state restricts executor results to running|success|failed|interrupted|timeout"
+      ],
+      "error_modes": [
+        "raise(message, fatal=true) surfaces fatal GameMaker error dialog"
+      ],
+      "determinism": {"uses_rng": false},
+      "seams": ["show_error", "show_debug_message"],
+      "fixtures": []
+    },
+    {
+      "name": "_Animus_Component",
+      "files": ["GOAP/scripts/_Animus_Component/_Animus_Component.gml"],
+      "resources": ["GOAP/scripts/_Animus_Component/_Animus_Component.yy"],
+      "public_api": [
+        {"symbol": "_Animus_Component", "params": ["name"], "returns": "_Animus_Component", "notes": "Provides immutable component_id and component_name."},
+        {"symbol": "_Animus_Component.is_equal", "params": ["other"], "returns": "bool", "notes": "Identity comparison used by Animus_Action/Goal/Belief."},
+        {"symbol": "_Animus_Component.to_string", "params": [], "returns": "string", "notes": "Stable debug identifier."}
+      ],
+      "events": [],
+      "inputs": [{"arg": "name", "type": "string"}],
+      "outputs": [{"type": "struct", "shape": "{component_id:int, component_name:string}"}],
+      "state_keys": [],
+      "invariants": ["component_id increments globally per instantiation"],
+      "error_modes": ["name undefined triggers Animus_Core.assert"],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_Core.assert"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Action",
+      "files": ["GOAP/scripts/Animus_Action/Animus_Action.gml"],
+      "resources": ["GOAP/scripts/Animus_Action/Animus_Action.yy"],
+      "public_api": [
+        {"symbol": "Animus_Action", "params": ["name", "preconditions", "effects", "cost"], "returns": "Animus_Action", "notes": "Normalizes predicates and wraps cost into a callable."},
+        {"symbol": "Animus_Action.is_equal", "params": ["other"], "returns": "bool", "notes": "Identity comparison via _Animus_Component."},
+        {"symbol": "Animus_Action.cost", "params": ["state"], "returns": "real", "notes": "Evaluates dynamic or constant cost."},
+        {"symbol": "Animus_Action.estimate_heuristic_to", "params": ["goal", "state"], "returns": "real", "notes": "Placeholder returning 0 for extensions."},
+        {"symbol": "Animus_Action.describe", "params": [], "returns": "string", "notes": "Debug summary with name and nominal cost."}
+      ],
+      "events": [],
+      "inputs": [
+        {"arg": "preconditions", "type": "PredicateList"},
+        {"arg": "effects", "type": "PredicateList"},
+        {"arg": "cost", "type": "real|callable"}
+      ],
+      "outputs": [
+        {"type": "Animus_Action", "shape": "{name:string, preconditions:[Predicate], effects:[Predicate], cost(state):real}"}
+      ],
+      "state_keys": [],
+      "invariants": [
+        "Preconditions and effects are canonicalized via Animus_Predicate.normalize_list",
+        "cost accessor is always callable regardless of input type"
+      ],
+      "error_modes": ["Non-numeric, non-callable cost defaults to constant 1"],
+      "determinism": {"uses_rng": false},
+      "seams": ["_Animus_Component", "Animus_Predicate.normalize_list"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_ActionStrategy",
+      "files": ["GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml"],
+      "resources": ["GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.yy"],
+      "public_api": [
+        {"symbol": "Animus_ActionStrategy", "params": ["action_reference"], "returns": "Animus_ActionStrategy", "notes": "Base runtime strategy shell."},
+        {"symbol": "Animus_ActionStrategy.start", "params": ["context"], "returns": "void", "notes": "Hook for executor activation."},
+        {"symbol": "Animus_ActionStrategy.update", "params": ["context", "dt"], "returns": "Animus_RunState", "notes": "Default returns running; override per action."},
+        {"symbol": "Animus_ActionStrategy.stop", "params": ["context", "reason"], "returns": "void", "notes": "Cleanup on finish or interruption."},
+        {"symbol": "Animus_ActionStrategy.invariant_check", "params": ["context"], "returns": "bool", "notes": "Return false to invalidate the current plan."},
+        {"symbol": "Animus_ActionStrategy.get_expected_duration", "params": ["context"], "returns": "real|undefined", "notes": "Executor timeout hint."},
+        {"symbol": "Animus_ActionStrategy.get_reservation_keys", "params": ["context"], "returns": "string[]", "notes": "Resource reservation hints."},
+        {"symbol": "Animus_ActionStrategy.get_last_invariant_key", "params": [], "returns": "string|undefined", "notes": "Optional debug hint when invariant fails."},
+        {"symbol": "Animus_ActionStrategy.interrupt", "params": ["context", "reason"], "returns": "void", "notes": "Compatibility alias calling stop()."},
+        {"symbol": "Animus_ActionStrategy.expected_duration", "params": ["context"], "returns": "real|undefined", "notes": "Legacy alias for get_expected_duration."},
+        {"symbol": "Animus_ActionStrategy.reservation_keys", "params": ["context"], "returns": "string[]", "notes": "Legacy alias for get_reservation_keys."},
+        {"symbol": "GOAP_ActionStrategy", "params": ["action"], "returns": "Animus_ActionStrategy", "notes": "Compatibility constructor."}
+      ],
+      "events": [],
+      "inputs": [{"arg": "context", "type": "{agent,world,blackboard,memory,plan,step_index,elapsed,logical_time,rng_*}"}],
+      "outputs": [{"type": "Animus_ActionStrategy", "shape": "Strategy struct consumed by Animus_Executor"}],
+      "state_keys": [],
+      "invariants": ["update must yield an Animus_RunState constant"],
+      "error_modes": ["Missing overrides inherit no-op behaviour (executor treats as RUNNING)"],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_RunState"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_StrategyTemplates",
+      "files": ["Animus_StrategyTemplates.gml"],
+      "resources": [],
+      "public_api": [
+        {"symbol": "Strategy_Instant", "params": ["action_ref", "params"], "returns": "Animus_ActionStrategy", "notes": "Completes on first update; supports on_start/on_success/invariant_fn/reservation_keys."},
+        {"symbol": "Strategy_Timed", "params": ["action_ref", "params"], "returns": "Animus_ActionStrategy", "notes": "Tracks elapsed vs target_s/expected_s with optional soft_timeout_s."},
+        {"symbol": "Strategy_Move", "params": ["action_ref", "params"], "returns": "Animus_ActionStrategy", "notes": "Movement wrapper enforcing path invariants and reservations."}
+      ],
+      "events": [],
+      "inputs": [
+        {"arg": "params.target_s", "type": "real", "notes": "Strategy_Timed duration target."},
+        {"arg": "params.soft_timeout_s", "type": "real|undefined", "notes": "Triggers FAILED before target."},
+        {"arg": "params.nav_key_fn", "type": "callable", "notes": "Strategy_Move reservation key source."},
+        {"arg": "params.path_is_valid", "type": "callable", "notes": "Strategy_Move invariant predicate."}
+      ],
+      "outputs": [{"type": "Animus_ActionStrategy", "shape": "Strategy struct with start/update/stop/invariant hooks"}],
+      "state_keys": ["reservation.<custom>", "nav.<custom>", "context.memory.<user-defined>"],
+      "invariants": [
+        "Strategy_Instant always transitions to success after first update",
+        "Strategy_Timed marks FAILED when soft_timeout_s fires before target_s",
+        "Strategy_Move caches the last bad nav key when path_is_valid returns false"
+      ],
+      "error_modes": [
+        "Strategy_Timed flags timeout->FAILED on soft timeout",
+        "Strategy_Move relies on caller-provided path validation"
+      ],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_ActionStrategy", "Animus_RunState", "Animus_Core.is_callable"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_RunState",
+      "files": ["GOAP/scripts/Animus_RunState/Animus_RunState.gml"],
+      "resources": ["GOAP/scripts/Animus_RunState/Animus_RunState.yy"],
+      "public_api": [
+        {"symbol": "Animus_RunState.RUNNING", "params": [], "returns": "string", "notes": ""},
+        {"symbol": "Animus_RunState.SUCCESS", "params": [], "returns": "string", "notes": ""},
+        {"symbol": "Animus_RunState.FAILED", "params": [], "returns": "string", "notes": ""},
+        {"symbol": "Animus_RunState.INTERRUPTED", "params": [], "returns": "string", "notes": ""},
+        {"symbol": "Animus_RunState.TIMEOUT", "params": [], "returns": "string", "notes": ""}
+      ],
+      "events": [],
+      "inputs": [],
+      "outputs": [{"type": "enum", "shape": "running|success|failed|interrupted|timeout"}],
+      "state_keys": [],
+      "invariants": ["Values stored as lowercase strings for executor guards"],
+      "error_modes": [],
+      "determinism": {"uses_rng": false},
+      "seams": [],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Predicate",
+      "files": ["GOAP/scripts/Animus_Predicate/Animus_Predicate.gml"],
+      "resources": ["GOAP/scripts/Animus_Predicate/Animus_Predicate.yy"],
+      "public_api": [
+        {"symbol": "Animus_Predicate.normalize_list", "params": ["predicates", "mode"], "returns": "Predicate[]", "notes": "Accepts strings/arrays/structs, enforces canonical ops."},
+        {"symbol": "Animus_Predicate.evaluate", "params": ["state", "predicate"], "returns": "bool", "notes": "Compares struct field against predicate."},
+        {"symbol": "Animus_Predicate.apply_effect", "params": ["state", "predicate"], "returns": "void", "notes": "Mutates state per predicate op (including unset)."},
+        {"symbol": "Animus_Predicate.extract_keys_from_action", "params": ["action"], "returns": "string[]", "notes": "Harvests unique keys from preconditions and effects."}
+      ],
+      "events": [],
+      "inputs": [{"arg": "predicate.key", "type": "string"}],
+      "outputs": [{"type": "Predicate", "shape": "{key:string, op:string, value:any}"}],
+      "state_keys": [],
+      "invariants": ["Unknown ops normalized to eq", "Mode=effect interprets unset/negate to remove keys"],
+      "error_modes": [],
+      "determinism": {"uses_rng": false},
+      "seams": ["variable_struct_get_names", "array_sort"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Belief",
+      "files": ["GOAP/scripts/Animus_Belief/Animus_Belief.gml"],
+      "resources": ["GOAP/scripts/Animus_Belief/Animus_Belief.yy"],
+      "public_api": [
+        {"symbol": "Animus_Belief", "params": ["name", "config", "evaluator"], "returns": "Animus_Belief", "notes": "Normalizes config (memory_key, selector, debounce, truth_map, auto_clean)."},
+        {"symbol": "Animus_Belief.bind", "params": ["memory"], "returns": "void", "notes": "Registers memory source for evaluation."},
+        {"symbol": "Animus_Belief.bind_to_memory", "params": ["memory"], "returns": "void", "notes": "Compatibility alias."},
+        {"symbol": "Animus_Belief.unbind", "params": [], "returns": "void", "notes": "Clears memory binding."},
+        {"symbol": "Animus_Belief.evaluate_now", "params": ["memory"], "returns": "bool", "notes": "Executes selector/evaluator with debounce and post_evaluate hook."},
+        {"symbol": "Animus_Belief.is_true", "params": [], "returns": "bool", "notes": "Returns last evaluation result."}
+      ],
+      "events": [],
+      "inputs": [
+        {"key": "memory.<config.memory_key>", "required": false},
+        {"arg": "config.selector", "type": "callable"},
+        {"arg": "config.debounce_ticks", "type": "int"},
+        {"arg": "config.post_evaluate", "type": "callable"}
+      ],
+      "outputs": [{"type": "bool", "shape": "evaluate_now -> true|false"}],
+      "state_keys": ["memory.<config.memory_key>"],
+      "invariants": [
+        "Debounce skips evaluation until debounce_ticks elapse",
+        "auto_clean calls memory.clean(memory_key) after evaluation when bound"
+      ],
+      "error_modes": ["Selector defaults to previous cached value when undefined"],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_Memory.get", "Animus_Memory.clean", "Animus_Core.is_callable"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Goal",
+      "files": ["GOAP/scripts/Animus_Goal/Animus_Goal.gml"],
+      "resources": ["GOAP/scripts/Animus_Goal/Animus_Goal.yy"],
+      "public_api": [
+        {"symbol": "Animus_Goal", "params": ["name", "desired_effects", "priority"], "returns": "Animus_Goal", "notes": "Normalizes desired_effects and wraps priority into a callable."},
+        {"symbol": "Animus_Goal.priority", "params": ["memory"], "returns": "real", "notes": "Dynamic priority evaluation."},
+        {"symbol": "Animus_Goal.is_relevant", "params": ["memory"], "returns": "bool", "notes": "Gate for planner consideration (default true)."},
+        {"symbol": "Animus_Goal.matches_state", "params": ["state"], "returns": "bool", "notes": "Checks desired_effects against snapshot."},
+        {"symbol": "Animus_Goal.describe", "params": [], "returns": "string", "notes": "Debug summary."}
+      ],
+      "events": [],
+      "inputs": [{"arg": "desired_effects", "type": "PredicateList"}],
+      "outputs": [{"type": "Animus_Goal", "shape": "{name:string, desired_effects:[Predicate], priority(memory):real}"}],
+      "state_keys": [],
+      "invariants": ["desired_effects normalized via Animus_Predicate"],
+      "error_modes": ["Non-callable priority defaults to 0"],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_Predicate", "_Animus_Component"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Plan",
+      "files": ["GOAP/scripts/Animus_Plan/Animus_Plan.gml"],
+      "resources": ["GOAP/scripts/Animus_Plan/Animus_Plan.yy"],
+      "public_api": [
+        {"symbol": "Animus_Plan", "params": ["plan_struct"], "returns": "Animus_Plan", "notes": "Presentation wrapper for planner output."},
+        {"symbol": "Animus_Plan.is_valid", "params": [], "returns": "bool", "notes": "Confirms goal/actions fields exist."},
+        {"symbol": "Animus_Plan.goal", "params": [], "returns": "Animus_Goal|undefined", "notes": ""},
+        {"symbol": "Animus_Plan.actions", "params": [], "returns": "Animus_Action[]", "notes": ""},
+        {"symbol": "Animus_Plan.cost", "params": [], "returns": "real|undefined", "notes": ""},
+        {"symbol": "Animus_Plan.length", "params": [], "returns": "int", "notes": "Number of actions."},
+        {"symbol": "Animus_Plan.meta", "params": [], "returns": "struct|undefined", "notes": "Meta snapshot from planner."},
+        {"symbol": "Animus_Plan.to_json", "params": [], "returns": "string", "notes": "Stable JSON serialisation of plan payload."},
+        {"symbol": "Animus_Plan.to_pretty_string", "params": [], "returns": "string", "notes": "Human readable multi-line summary."}
+      ],
+      "events": [],
+      "inputs": [{"arg": "plan_struct", "type": "struct"}],
+      "outputs": [{"type": "struct", "shape": "{goal, actions, cost, meta}"}],
+      "state_keys": [],
+      "invariants": ["Invalid plan yields plan_valid:false in to_json", "Meta keys sorted for pretty output"],
+      "error_modes": [],
+      "determinism": {"uses_rng": false},
+      "seams": ["json_stringify", "array_sort"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Planner",
+      "files": ["GOAP/scripts/Animus_Planner/Animus_Planner.gml"],
+      "resources": ["GOAP/scripts/Animus_Planner/Animus_Planner.yy"],
+      "public_api": [
+        {"symbol": "Animus_Planner.config", "params": [], "returns": "struct", "notes": "{max_expansions:2000, max_depth:64, time_budget_ms:8, reopen_closed_on_better_g:true}."},
+        {"symbol": "Animus_Planner.reuse_policy", "params": [], "returns": "struct", "notes": "{allow_reuse:true, allow_partial:true}."},
+        {"symbol": "Animus_Planner.plan", "params": ["agent", "goals", "memory", "last_goal"], "returns": "Plan|undefined", "notes": "A* search with partial-plan support and plan reuse."}
+      ],
+      "events": [],
+      "inputs": [
+        {"arg": "agent.actions", "type": "Animus_Action[]"},
+        {"arg": "goals", "type": "Animus_Goal[]"},
+        {"key": "memory.<referenced_keys>", "required": true},
+        {"arg": "last_goal", "type": "Animus_Goal|undefined"}
+      ],
+      "outputs": [
+        {"type": "Plan", "shape": "{goal, actions, cost, meta:{built_at_tick, elapsed_ms, nodes_expanded, nodes_generated, open_peak, referenced_keys[], is_partial, budget:{nodes, ms}, reason}}"}
+      ],
+      "state_keys": ["meta.referenced_keys[*]", "meta.built_at_tick"],
+      "invariants": [
+        "Plan reuse blocked when meta.is_partial is true",
+        "should_reuse_plan verifies memory.is_dirty and memory.last_updated for referenced keys",
+        "Goal satisfied by initial state returns zero-step plan with explicit meta"
+      ],
+      "error_modes": [
+        "Missing memory raises fatal error",
+        "search_plan returns undefined when budget exhausted without allow_partial"
+      ],
+      "determinism": {"uses_rng": false},
+      "seams": ["ds_priority_create", "Animus_Predicate.evaluate", "memory.keys", "memory.get", "memory.is_dirty", "memory.last_updated"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Memory",
+      "files": ["GOAP/scripts/Animus_Memory/Animus_Memory.gml"],
+      "resources": ["GOAP/scripts/Animus_Memory/Animus_Memory.yy"],
+      "public_api": [
+        {"symbol": "Animus_Memory", "params": [], "returns": "Animus_Memory", "notes": "Initialises bit store with dirty tracking."},
+        {"symbol": "Animus_Memory.tick", "params": [], "returns": "void", "notes": "Advances logical clock."},
+        {"symbol": "Animus_Memory._now", "params": [], "returns": "real", "notes": "Logical tick counter."},
+        {"symbol": "Animus_Memory.get", "params": ["key", "default"], "returns": "any", "notes": "Returns stored value or default."},
+        {"symbol": "Animus_Memory.set", "params": ["key", "value", "options"], "returns": "void", "notes": "Writes value and metadata, marks dirty."},
+        {"symbol": "Animus_Memory.write", "params": ["key", "value", "source_or_options", "confidence"], "returns": "void", "notes": "Convenience wrapper over set()."},
+        {"symbol": "Animus_Memory.read", "params": ["key", "default"], "returns": "any", "notes": "Alias for get()."},
+        {"symbol": "Animus_Memory.has", "params": ["key"], "returns": "bool", "notes": "Checks whether bit exists."},
+        {"symbol": "Animus_Memory.mark_dirty", "params": ["key"], "returns": "void", "notes": "Marks bit dirty without mutating value."},
+        {"symbol": "Animus_Memory.clean", "params": ["key"], "returns": "void", "notes": "Clears dirty flag."},
+        {"symbol": "Animus_Memory.clean_all", "params": [], "returns": "void", "notes": "Clears dirty flag on all bits."},
+        {"symbol": "Animus_Memory.subscribe", "params": ["key", "listener"], "returns": "void", "notes": "Registers listener(key,value,dirty,last_updated)."},
+        {"symbol": "Animus_Memory.unsubscribe", "params": ["key", "listener"], "returns": "void", "notes": "Removes listener."},
+        {"symbol": "Animus_Memory.is_dirty", "params": ["key"], "returns": "bool", "notes": "Reports dirty flag."},
+        {"symbol": "Animus_Memory.last_updated", "params": ["key"], "returns": "real", "notes": "Logical tick of last write."},
+        {"symbol": "Animus_Memory.get_bit", "params": ["key"], "returns": "struct|undefined", "notes": "Exposes raw bit struct."},
+        {"symbol": "Animus_Memory.keys", "params": [], "returns": "string[]", "notes": "All tracked keys."},
+        {"symbol": "Animus_Memory.snapshot", "params": ["include_metadata"], "returns": "struct", "notes": "Deep clone of stored values (optionally metadata)."}
+      ],
+      "events": [],
+      "inputs": [{"arg": "listener", "type": "function(key,value,dirty,last_updated)"}],
+      "outputs": [{"type": "struct", "shape": "bits:{key->{value,dirty,last_updated,version,source,confidence}}"}],
+      "state_keys": ["*"],
+      "invariants": ["tick_counter increments on each write or mark_dirty", "snapshot(include_metadata=true) deep clones nested arrays and structs"],
+      "error_modes": ["Confidence metadata clamped to [0,1]"],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_Executor expects add_listener/remove_listener or writable on_bit_changed"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Executor",
+      "files": ["GOAP/scripts/Animus_Executor/Animus_Executor.gml"],
+      "resources": ["GOAP/scripts/Animus_Executor/Animus_Executor.yy"],
+      "public_api": [
+        {"symbol": "GOAP_Executor", "params": [], "returns": "Animus_Executor", "notes": "Primary constructor."},
+        {"symbol": "Animus_Executor", "params": [], "returns": "Animus_Executor", "notes": "Alias returning GOAP_Executor."},
+        {"symbol": "Animus_Executor.start", "params": ["plan", "agent", "world", "blackboard", "memory", "reservation_bus"], "returns": "bool", "notes": "Initialises execution, acquires reservations, attaches memory listener."},
+        {"symbol": "Animus_Executor.tick", "params": ["dt"], "returns": "string", "notes": "Advances active strategy and updates status."},
+        {"symbol": "Animus_Executor.snapshot", "params": [], "returns": "struct", "notes": "Captures execution and debug state."},
+        {"symbol": "Animus_Executor.restore", "params": ["snapshot", "agent", "world", "blackboard", "memory", "reservation_bus"], "returns": "bool", "notes": "Restores executor state and reservations."},
+        {"symbol": "Animus_Executor.interrupt", "params": ["reason"], "returns": "void", "notes": "Stops current strategy and transitions to interrupted."},
+        {"symbol": "Animus_Executor.clear_plan_invalidated", "params": [], "returns": "void", "notes": "Clears plan_invalidated flag."},
+        {"symbol": "Animus_Executor.was_plan_invalidated", "params": [], "returns": "bool", "notes": "Indicates if invalidation occurred since last clear."},
+        {"symbol": "Animus_Executor.get_invalidation_reason", "params": [], "returns": "string|undefined", "notes": "Last invalidation reason (timeout, invariant_fail, etc)."},
+        {"symbol": "Animus_Executor.is_running", "params": [], "returns": "bool", "notes": "status in starting|running|stopping."},
+        {"symbol": "Animus_Executor.current_action", "params": [], "returns": "Animus_Action|undefined", "notes": "Active action pointer."},
+        {"symbol": "Animus_Executor.debug_trace_count", "params": [], "returns": "int", "notes": "Trace ring length."},
+        {"symbol": "Animus_Executor.debug_trace_capacity", "params": [], "returns": "int", "notes": "Trace ring capacity."},
+        {"symbol": "Animus_Executor.debug_json", "params": [], "returns": "string", "notes": "JSON payload describing recent trace events."},
+        {"symbol": "Animus_Executor.playback_to_string", "params": ["plan"], "returns": "string", "notes": "Formatted playback over trace buffer."},
+        {"symbol": "Animus_Executor.seed", "params": ["seed_val"], "returns": "void", "notes": "Seeds deterministic RNG (default 5489 when first used)."},
+        {"symbol": "Animus_Executor.rng_float01", "params": [], "returns": "real", "notes": "Deterministic float in [0,1)."},
+        {"symbol": "Animus_Executor.rng_int", "params": ["min", "max"], "returns": "int", "notes": "Deterministic integer inclusive."},
+        {"symbol": "Animus_Executor.rng_chance", "params": ["probability"], "returns": "bool", "notes": "Bernoulli check using deterministic RNG."}
+      ],
+      "events": [],
+      "inputs": [
+        {"arg": "plan.meta.referenced_keys", "type": "string[]", "notes": "Used to scope memory invalidation."},
+        {"arg": "reservation_bus", "type": "struct", "notes": "Shared reservation registry."},
+        {"arg": "memory.add_listener", "type": "callable", "notes": "Optional; falls back to on_bit_changed."},
+        {"arg": "dt", "type": "real"}
+      ],
+      "outputs": [
+        {"type": "ExecutorSnapshot", "shape": "{step_index,status,elapsed_in_step,held_reservations[],logical_time,rng_state,plan_invalidated,relevant_keys[],trace_buf}"},
+        {"type": "string", "shape": "debug_json serialised trace"}
+      ],
+      "state_keys": ["plan.meta.referenced_keys[*]", "reservation_bus[*]"],
+      "invariants": [
+        "Active strategy must implement start/update/stop/invariant_check/reservation accessors",
+        "Memory changes to referenced keys flag _plan_stale and trigger invalidate",
+        "Status transitions limited to idle|starting|running|stopping|finished|failed|interrupted"
+      ],
+      "error_modes": [
+        "invariant_fail",
+        "timeout",
+        "stale_memory",
+        "partial_plan_end",
+        "action_failed",
+        "invalid_result (coerced to failed)"
+      ],
+      "determinism": {"uses_rng": true, "seed_path": "Animus_Executor.seed(seed_val)"},
+      "seams": ["Animus_ActionStrategy", "reservation_bus struct", "Animus_Core.assert", "memory.add_listener|on_bit_changed"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Agent",
+      "files": ["GOAP/scripts/Animus_Agent/Animus_Agent.gml"],
+      "resources": ["GOAP/scripts/Animus_Agent/Animus_Agent.yy"],
+      "public_api": [
+        {"symbol": "Animus_Agent", "params": [], "returns": "Animus_Agent", "notes": "Configurable GOAP agent shell."},
+        {"symbol": "Animus_Agent.bind", "params": ["planner", "memory", "executor", "world", "blackboard"], "returns": "Animus_Agent", "notes": "Wires planner/memory/executor/world references and prepares sensor hub."},
+        {"symbol": "Animus_Agent.set_goals", "params": ["goals_array"], "returns": "Animus_Agent", "notes": "Assigns goals and planner compatibility alias goals_to_check."},
+        {"symbol": "Animus_Agent.set_actions", "params": ["actions_array"], "returns": "Animus_Agent", "notes": "Caches action catalog."},
+        {"symbol": "Animus_Agent.set_beliefs", "params": ["beliefs_collection"], "returns": "Animus_Agent", "notes": "Supports array or struct of beliefs."},
+        {"symbol": "Animus_Agent.bind_beliefs_to_memory", "params": [], "returns": "void", "notes": "Invokes bind/bind_to_memory on each belief."},
+        {"symbol": "Animus_Agent.tick_perception", "params": [], "returns": "void", "notes": "Sensor hook (no-op by default)."},
+        {"symbol": "Animus_Agent.tick_planning", "params": [], "returns": "Plan|undefined", "notes": "Requests new plan when planner and memory available."},
+        {"symbol": "Animus_Agent.on_plan", "params": ["plan"], "returns": "void", "notes": "Writes agent.plan.goal_name memory key when goal changes."},
+        {"symbol": "Animus_Agent.tick", "params": ["dt"], "returns": "void", "notes": "Main loop orchestrating sensor, planner, executor lifecycles."},
+        {"symbol": "GOAP_Agent", "params": [], "returns": "Animus_Agent", "notes": "Compatibility alias."}
+      ],
+      "events": ["Step"],
+      "inputs": [
+        {"arg": "planner", "type": "Animus_Planner"},
+        {"arg": "memory", "type": "Animus_Memory"},
+        {"arg": "executor", "type": "Animus_Executor", "notes": "Optional; auto-instantiated if missing."},
+        {"arg": "sensor_hub", "type": "Animus_SensorHub", "notes": "Created internally when absent."}
+      ],
+      "outputs": [
+        {"type": "memory", "shape": "memory.write('agent.plan.goal_name', goal_name) on plan change"},
+        {"type": "Animus_Plan", "shape": "last_plan and _active_plan cached"}
+      ],
+      "state_keys": ["agent.plan.goal_name"],
+      "invariants": [
+        "Planner and memory must be bound before planning",
+        "Executor restarted when plan invalidated or finished"
+      ],
+      "error_modes": ["tick early-outs when planner or memory undefined", "_request_plan returns undefined when planner fails"],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_Planner.plan", "Animus_Executor.start", "Animus_Executor.tick", "Animus_Executor.was_plan_invalidated", "Animus_Memory.snapshot", "Animus_SensorHub.tick"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Sensor",
+      "files": ["GOAP/scripts/Animus_Sensor/Animus_Sensor.gml"],
+      "resources": ["GOAP/scripts/Animus_Sensor/Animus_Sensor.yy"],
+      "public_api": [
+        {"symbol": "Animus_Sensor", "params": ["interval_seconds"], "returns": "Animus_Sensor", "notes": "Base sensor with optional sampling interval."},
+        {"symbol": "Animus_Sensor.sense", "params": ["memory"], "returns": "void", "notes": "Override to populate memory."},
+        {"symbol": "Animus_Sensor.tick", "params": ["memory", "dt"], "returns": "void", "notes": "Invokes sense() when interval elapses."}
+      ],
+      "events": [],
+      "inputs": [
+        {"arg": "interval_seconds", "type": "real"},
+        {"arg": "dt", "type": "real"}
+      ],
+      "outputs": [{"type": "Animus_Sensor", "shape": "{interval, last_tick, last_value}"}],
+      "state_keys": [],
+      "invariants": ["dt accumulator resets when interval reached"],
+      "error_modes": ["interval <= 0 causes sampling every tick"],
+      "determinism": {"uses_rng": false},
+      "seams": ["memory._now"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_SensorHub",
+      "files": ["GOAP/scripts/Animus_SensorHub/Animus_SensorHub.gml"],
+      "resources": ["GOAP/scripts/Animus_SensorHub/Animus_SensorHub.yy"],
+      "public_api": [
+        {"symbol": "Animus_SensorHub", "params": ["agent", "world", "blackboard", "memory"], "returns": "Animus_SensorHub", "notes": "Coordinates a collection of sensors."},
+        {"symbol": "Animus_SensorHub.configure", "params": ["agent", "world", "blackboard", "memory"], "returns": "Animus_SensorHub", "notes": "Refreshes context references."},
+        {"symbol": "Animus_SensorHub.set_memory", "params": ["memory"], "returns": "Animus_SensorHub", "notes": "Updates memory binding."},
+        {"symbol": "Animus_SensorHub.get_memory", "params": [], "returns": "Animus_Memory|undefined", "notes": ""},
+        {"symbol": "Animus_SensorHub.add_sensor", "params": ["sensor"], "returns": "void", "notes": "Adds sensor when not already present."},
+        {"symbol": "Animus_SensorHub.remove_sensor", "params": ["sensor"], "returns": "void", "notes": "Removes sensor by identity."},
+        {"symbol": "Animus_SensorHub.context", "params": [], "returns": "struct", "notes": "Provides {agent, world, blackboard, memory}."},
+        {"symbol": "Animus_SensorHub.tick", "params": ["dt_or_memory", "maybe_dt"], "returns": "void", "notes": "Ticks sensors using stored or explicit memory reference."},
+        {"symbol": "GOAP_SensorHub", "params": ["agent", "world", "blackboard", "memory"], "returns": "Animus_SensorHub", "notes": "Compatibility alias."}
+      ],
+      "events": [],
+      "inputs": [
+        {"arg": "sensors", "type": "Animus_Sensor[]"},
+        {"arg": "dt", "type": "real"}
+      ],
+      "outputs": [{"type": "struct", "shape": "context {agent, world, blackboard, memory}"}],
+      "state_keys": [],
+      "invariants": ["add_sensor prevents duplicates"],
+      "error_modes": ["tick treats undefined dt as 0"],
+      "determinism": {"uses_rng": false},
+      "seams": ["Animus_Sensor.tick"],
+      "fixtures": []
+    },
+    {
+      "name": "Animus_Debug",
+      "files": ["GOAP/scripts/Animus_Debug/Animus_Debug.gml"],
+      "resources": ["GOAP/scripts/Animus_Debug/Animus_Debug.yy"],
+      "public_api": [
+        {"symbol": "Animus_Debug", "params": [], "returns": "void", "notes": "Initialises static helpers."},
+        {"symbol": "Animus_Debug.dump_plan", "params": ["plan"], "returns": "string", "notes": "Human-readable plan summary."},
+        {"symbol": "Animus_Debug.profile_block", "params": ["name", "fn"], "returns": "{ms,result}", "notes": "Measures callable execution time in milliseconds."},
+        {"symbol": "Animus_Debug.playback_to_string", "params": ["executor", "plan"], "returns": "string", "notes": "Formats executor trace with optional plan."}
+      ],
+      "events": [],
+      "inputs": [{"arg": "executor.debug_trace_snapshot", "type": "callable", "required": false}],
+      "outputs": [{"type": "string", "shape": "Plan dump or trace log"}],
+      "state_keys": [],
+      "invariants": ["profile_block returns elapsed >= 0"],
+      "error_modes": ["Missing debug_trace_snapshot yields '<empty>' trace"],
+      "determinism": {"uses_rng": false},
+      "seams": ["current_time", "show_debug_message", "Animus_Core.log"],
+      "fixtures": []
+    }
+  ],
+  "planner": {
+    "actions": [
+      {"name": "Get Food", "pre": [], "eff": ["agent.has_food=true"], "cost": "2", "strategy": "Strategy_Timed(target_s=1.5, on_success writes agent.food_inventory=1)"},
+      {"name": "Eat", "pre": ["agent.has_food=true"], "eff": ["agent.hungry=false"], "cost": "state['agent.hungry']+1", "strategy": "Strategy_Instant(on_success resets hunger and decrements inventory)"}
+    ],
+    "templates_present": ["instant", "timed", "move"],
+    "timeouts": {"planner_time_budget_ms": 8},
+    "budget": {"max_expansions": 2000, "max_depth": 64, "partial_plan_flag": true, "reopen_closed_on_better_g": true}
+  },
+  "executor": {
+    "lifecycle": ["idle", "start", "running", "stopping", "finished|failed|interrupted"],
+    "replan_hooks": ["partial_plan_end", "invariant_fail", "timeout", "stale_memory", "action_failed"],
+    "outcomes_enum": ["success", "failed", "timeout", "interrupted"]
+  },
+  "memory": {
+    "snapshot_api": ["Animus_Memory.snapshot"],
+    "versioning": {"current": "tick_counter", "migrations": []},
+    "debug_surfaces": ["Animus_Memory.keys", "Animus_Memory.get_bit"]
+  },
+  "agent": {
+    "planner_call": {"fn": "Animus_Planner.plan", "args": ["self", "goals", "memory", "last_goal"]},
+    "executor_tick": {"fn": "Animus_Executor.tick", "cadence": "Step"}
+  },
+  "ci": {
+    "scripts": [
+      "tools/precommit-animus.sh",
+      "tools/gml_linter.py",
+      "tools/gml_sanity.py",
+      "tools/strategy_template_enforcer.py",
+      "tools/strategy_apply_suggestions.py",
+      "tools/yy_fixit.py",
+      "tools/yy_integrity.py"
+    ],
+    "artifacts": []
+  }
+}

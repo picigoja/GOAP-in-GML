@@ -1,0 +1,143 @@
+Module Summaries:
+
+Animus_Core:
+- static raise/assert/is_callable/assert_plan_shape/assert_run_state/pretty/log
+- uses GameMaker show_error/show_debug_message
+- defines compatibility GOAP_* constructors with extra guards
+- invariants: plan struct shape, run state validity
+- seam: GameMaker show_error, show_debug_message
+
+_Animus_Component:
+- provides unique component_id (static counter) and is_equal, to_string
+- used by Action, Goal, Belief for identity equality
+
+Animus_Action:
+- constructor normalizes preconditions/effects via Animus_Predicate
+- accepts cost function or constant; wraps into callable
+- methods: is_equal (via component), cost(state), estimate_heuristic_to(goal,state), describe()
+- reuses _Animus_Component
+
+Animus_ActionStrategy:
+- base strategy default methods, ensures compatibility alias GOAP_ActionStrategy
+- update returns Animus_RunState.RUNNING by default
+- ensures invariants via default functions
+
+Animus_StrategyTemplates:
+- exports Strategy_Instant, Strategy_Timed, Strategy_Move
+- uses helper _MakeBaseStrategy returning new Animus_ActionStrategy and populates members as needed
+- Strategy_Timed handles soft timeouts via Animus_RunState.FAILED, expected duration
+- Strategy_Move enforces invariant via path_is_valid, exposes reservation keys via nav_key_fn, provides last invariant key
+- uses Animus_RunState constants and Animus_Core assertion helpers
+
+Animus_RunState:
+- static enum of run states (running, success, failed, interrupted, timeout)
+
+Animus_Predicate:
+- static helpers: normalize_list, evaluate, apply_effect, extract_keys_from_action
+- supports strings, arrays, structs; handles unset etc
+
+Animus_Goal:
+- uses _Animus_Component
+- desired_effects normalized; priority function wrappers; is_relevant default true
+- matches_state uses Animus_Predicate.evaluate on desired effects
+
+Animus_Belief:
+- uses _Animus_Component
+- normalizes config (memory_key, selector, evaluator, truth_map, debounce_ticks, auto_clean...)
+- binds to memory, evaluate_now implements debounce and post_evaluate hook
+- auto cleans memory bit using memory.clean when auto_clean true
+
+Animus_Memory:
+- stores bits with value, dirty, last_updated, version, source, confidence
+- methods: tick, _now, get, set, write (options or inline), read, has, mark_dirty, clean, clean_all, subscribe/unsubscribe, is_dirty, last_updated, get_bit, keys, snapshot(include_metadata)
+- ensures arrays/structs deep cloned in snapshot and write
+- uses tick_counter as versioning; no migrations (v1 fresh)
+
+Animus_Plan:
+- wraps plan struct; exposes is_valid, goal, actions, cost, length, meta, to_json, to_pretty_string
+
+Animus_Planner:
+- constructor config: max_expansions=2000, max_depth=64, time_budget_ms=8, reopen_closed_on_better_g=true
+- reuse_policy: allow_reuse true, allow_partial true
+- last_plan cached; should_reuse_plan checks memory.is_dirty/last_updated and built_at_tick, referenced_keys
+- build_initial_state clones memory snapshot via memory.keys/get
+- search_plan A* search with ds_priority, heuristics from unsatisfied goal conditions, budget_exhausted flag, partial plan support
+- meta includes built_at_tick, elapsed_ms, nodes_expanded, nodes_generated, open_peak, referenced_keys, is_partial, budget {nodes, ms}, reason (search_result.reason)
+- plan struct adds to_string/debug_json
+- returns plan struct or undefined; plan reuse if allowed and still valid
+
+Animus_Agent:
+- fields: planner, memory, executor, world, blackboard, reservation_bus, sensor_hub, beliefs, goals, actions etc
+- bind(planner, memory, executor?, world?, blackboard?) sets sensor hub
+- set_goals/actions/beliefs; bind_beliefs_to_memory iterates and calls bind (supporting arrays/structs)
+- tick_perception placeholder; tick_planning triggers planner.plan when available
+- on_plan writes memory key agent.plan.goal_name when changed
+- tick orchestrates perception/planning/execution: ensures executor exists, handles scheduling, starts executor, handles plan invalidation, failure, completion
+- _request_plan calls planner.plan, caches last_plan, last_goal, last_plan_tick, obtains memory.snapshot(false)
+- depends on Animus_Executor, Animus_SensorHub, Animus_Memory, Animus_Core
+- state key: agent.plan.goal_name
+
+Animus_Executor (GOAP_Executor alias):
+- state fields: plan_ref, step_index, active_strategy, status, elapsed_in_step, reservation_bus, held_reservations, expected duration, owner id, plan invalidation flags, logical_time, deterministic RNG (seed, rng_*), debug buffer
+- start(plan,...): attaches memory listener, sets reservation bus, resets state, transitions to starting, tries to advance to first action; handles plan meta (referenced_keys, is_partial)
+- snapshot(): returns struct capturing execution state and debug trace, plan metadata, action indices/names
+- restore(snapshot,...): reconstructs executor state; reacquires reservations; rebuilds plan references via agent's actions/goals names/index
+- tick(dt): updates logical_time, handles statuses, obtains action strategies (using factories or existing strategy property or fallback), ensures invariants, handles reservations, executes update cycle; invalidates plan on invariant failure, stale memory, timeout, partial plan end, action failure; sets statuses accordingly; triggers _invalidate_plan reason; purposely uses Animus_ActionStrategy if none provided; ensures `_plan_stale` triggered by memory listener on relevant keys (plan.meta.referenced_keys)
+- current_action, is_running, debug_json, playback_to_string etc
+- reservation handling via get_reservation_keys -> acquisition/reservation bus uniqueness
+- replan triggers: plan invalidated (partial_plan_end, invariant_fail, timeout, stale_memory, action_failed)
+- deterministic RNG default seed 5489 auto when first used
+
+Animus_Debug:
+- static dump_plan(plan), profile_block(name, fn), playback_to_string(executor, plan)
+- uses Animus_Core.log, show_debug_message (conditionally), strings
+
+Animus_Sensor:
+- base sensor with interval, tick(memory, dt), sense(memory) stub to override, accumulates dt, writes last_tick using memory._now if available
+
+Animus_SensorHub:
+- manage sensors list; configure(agent, world, blackboard, memory); context() returns struct; tick() handles dt and optionally memory parameter, calling sensor.tick
+
+Other info:
+- GOAP compatibility aliases exist for Animus_ActionStrategy, Agent, Planner, etc; Script.yy %Name mostly GOAP_* (compat)
+- memory listener fallback uses .add_listener/@on_bit_changed seam - actual Animus_Memory lacks add_listener, so legacy path attaches on_bit_changed property
+- Strategy templates rely on Animus_RunState constants as strings, expect context {agent, world, blackboard, memory, plan, step_index, elapsed, logical_time, rng_*}
+- Determinism: Planner uses current_time for budget; executor uses deterministic RNG (seed, rng functions). No other RNG usage found.
+- CI / tooling: tools/precommit-animus.sh, gml_linter.py, gml_sanity.py, strategy_template_enforcer.py, etc. No explicit logs except executor debug_json output.
+
+State keys seen:
+- agent.plan.goal_name (Animus_Agent)
+- Plan meta referenced_keys derived from actions/goals (dynamic)
+- README sample keys: agent.hunger, agent.food_inventory, agent.has_food
+
+Error modes enumerated:
+- Planner: budget_exhausted, no_solution, reuse invalidation (dirty memory), memory missing -> raise, partial plan flagged, reason search_result.reason (e.g., budget_exhausted when partial)
+- Executor invalidation reasons: invariant_fail, timeout, stale_memory, partial_plan_end, action_failed
+- Executor statuses: idle, starting, running, stopping, finished, failed, interrupted
+- Strategy templates: Strategy_Timed -> fail on soft timeout, Strategy_Move -> fail via invariant check/reservation
+
+Seams to note:
+- Animus_Planner relies on ds_priority_* data structures, Animus_Predicate, memory.keys/get/is_dirty/last_updated
+- Animus_Executor expects actions to expose strategies or reservation keys; uses Animus_ActionStrategy fallback; interacts with reservation_bus external struct; uses current_time via dt input only.
+- Animus_Agent expects Animus_Memory._now, snapshot, memory.write/read; uses Animus_Executor.start/tick/was_plan_invalidated
+
+Memory versioning:
+- tick_counter increments on set/mark_dirty; snapshot include metadata when requested. No migrations.
+
+CI scripts/artifacts:
+- tools/precommit-animus.sh (shell script)
+- tools/gml_linter.py, gml_sanity.py, strategy_template_enforcer.py, strategy_apply_suggestions.py, yy_fixit.py, yy_integrity.py
+- No dedicated artifacts aside from executor.debug_json output.
+
+Script.yy mismatches:
+- Animus_Agent.yy %Name GOAP_Agent
+- Animus_Belief.yy %Name GOAP_Belief
+- Animus_ActionStrategy.yy %Name GOAP_ActionStrategy
+- Animus_Memory.yy %Name GOAP_Memory
+- _Animus_Component.yy %Name GOAP_Component
+- Animus_Plan.yy %Name GOAP_ActionPlan
+- Animus_Executor.yy %Name GOAP_Executor
+- Animus_Goal.yy %Name GOAP_Goal
+- Animus_Planner.yy %Name GOAP_Planner
+- Animus_Sensor.yy %Name GOAP_Sensor
+- Animus_SensorHub.yy %Name GOAP_SensorHub
