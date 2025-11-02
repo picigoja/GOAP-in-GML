@@ -1,7 +1,7 @@
 meta:
   project: "Animus (GOAP-in-GML)"
   created_at: "2025-11-01T16:30:51Z"
-  updated_at: "2025-11-02T09:12:57Z"
+  updated_at: "2025-11-02T09:27:50Z"
   provenance:
     - who: "Codex"
       what: "initial-create"
@@ -155,7 +155,7 @@ tasks:
       Executor invalidates at partial end and requests replanning.
     acceptance:
       - "Unreachable-goal scene advances via partials; no stalls."
-    status: queued
+    status: done
     priority: 2
     dependencies: ["T05"]
     labels: ["planner", "executor"]
@@ -302,4 +302,13 @@ log:
     acceptance_verification:
       - "Large-scene test shows no spurious invalidations from unrelated keys. - PASS: Executor now clones plan.meta.referenced_keys.map and filters memory events to that set before marking dirty (code inspection)."
       - "Touching a referenced key invalidates within one tick. - PASS: Memory listener queues changes via _mark_memory_dirty and tick() consumes them with _consume_memory_dirty(), asserting _plan_stale on the next tick boundary (code inspection)."
+  - when: "2025-11-02T09:27:50Z"
+    task_id: "T06"
+    summary: "Guaranteed partial plans surface detail metadata and trigger executor replans at handoff."
+    files_touched:
+      - "GOAP/scripts/Animus_Planner/Animus_Planner.gml"
+      - "GOAP/scripts/Animus_Executor/Animus_Executor.gml"
+      - "GOAP/Animus_CodexHelper.yaml"
+    acceptance_verification:
+      - "Unreachable-goal scene advances via partials; no stalls. - PASS: Planner now always returns a best-node plan with meta.partial detail and executor contexts include plan_reason, so partial_plan_end invalidations immediately queue replanning (code inspection)."
 decisions: []

@@ -276,8 +276,11 @@ function Animus_Planner() constructor {
             parent: undefined
         };
         start_node.f = start_node.g + start_node.h;
+        best_node = start_node;
+        best_score = start_node.f;
+        var start_hash = state_hash(start_node.state);
         ds_priority_add(open, start_node, start_node.f);
-        ds_map_add(open_best, state_hash(start_node.state), start_node.g);
+        ds_map_add(open_best, start_hash, start_node.g);
         nodes_generated += 1;
 
         while (!ds_priority_empty(open)) {
@@ -372,17 +375,27 @@ function Animus_Planner() constructor {
 
         var is_partial = false;
         var partial_reason = undefined;
+        var partial_detail = undefined;
 
         if (is_undefined(best_node)) {
             return undefined;
         }
 
-        if (heuristic_to_goal(goal, best_node.state) != 0) {
+        var remaining_distance = heuristic_to_goal(goal, best_node.state);
+
+        if (remaining_distance != 0) {
             is_partial = true;
             partial_reason = budget_exhausted ? "budget_exhausted" : "no_solution";
             if (!reuse_policy.allow_partial) {
                 return undefined;
             }
+            partial_detail = {
+                cause: partial_reason,
+                budget_exhausted: budget_exhausted,
+                remaining_distance: remaining_distance,
+                depth: is_struct(best_node) && variable_struct_exists(best_node, "depth") ? best_node.depth : 0,
+                best_cost: is_struct(best_node) && variable_struct_exists(best_node, "g") ? best_node.g : 0
+            };
         }
 
         var actions_taken = [];
@@ -401,7 +414,8 @@ function Animus_Planner() constructor {
             open_peak: open_peak,
             is_partial: is_partial,
             reason: partial_reason,
-            budget_exhausted: budget_exhausted
+            budget_exhausted: budget_exhausted,
+            detail: partial_detail
         };
     };
 
@@ -488,7 +502,7 @@ function Animus_Planner() constructor {
                     referenced_keys: empty_summary,
                     is_partial: false,
                     budget: { nodes: config.max_expansions, ms: config.time_budget_ms },
-                    reason: undefined
+                    reason: "goal_satisfied"
                 };
                 var empty_plan = generate_plan_struct(goal, [], 0, meta);
                 last_plan = empty_plan;
@@ -519,8 +533,27 @@ function Animus_Planner() constructor {
                 referenced_keys: summary,
                 is_partial: search_result.is_partial,
                 budget: { nodes: config.max_expansions, ms: config.time_budget_ms },
-                reason: search_result.reason
+                reason: search_result.is_partial ? search_result.reason : "goal_satisfied"
             };
+            if (!search_result.is_partial) {
+                meta.reason = "goal_satisfied";
+            }
+            if (search_result.is_partial) {
+                var partial_info = { cause: search_result.reason, budget_exhausted: search_result.budget_exhausted };
+                if (is_struct(search_result.detail)) {
+                    var detail = search_result.detail;
+                    if (variable_struct_exists(detail, "remaining_distance")) {
+                        partial_info.remaining_distance = detail.remaining_distance;
+                    }
+                    if (variable_struct_exists(detail, "depth")) {
+                        partial_info.depth = detail.depth;
+                    }
+                    if (variable_struct_exists(detail, "best_cost")) {
+                        partial_info.best_cost = detail.best_cost;
+                    }
+                }
+                meta.partial = partial_info;
+            }
 
             var plan_struct = generate_plan_struct(goal, search_result.actions, search_result.cost, meta);
             best_plan = plan_struct;

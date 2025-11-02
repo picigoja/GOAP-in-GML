@@ -1365,6 +1365,17 @@ function GOAP_Executor() constructor {
       rng_int : method(self, rng_int),
       rng_chance : method(self, rng_chance)
     };
+    if (is_struct(plan_ref) && variable_struct_exists(plan_ref, "meta")) {
+      var _meta_ref = plan_ref.meta;
+      if (is_struct(_meta_ref)) {
+        if (variable_struct_exists(_meta_ref, "reason")) {
+          _ctx.plan_reason = _meta_ref.reason;
+        }
+        if (variable_struct_exists(_meta_ref, "partial")) {
+          _ctx.plan_partial = _meta_ref.partial;
+        }
+      }
+    }
     return _ctx;
   };
 
