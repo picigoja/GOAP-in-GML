@@ -9,8 +9,10 @@ function scr_test_fixture_belief_config() {
             },
             debounce_ticks: 2,
             auto_clean: true,
-            post_evaluate: function(memory, result) {
-                memory.write("agent.last_belief", result);
+            post_evaluate: function(mapped_value, source) {
+                if (is_struct(source) && Animus_Core.is_callable(source.write)) {
+                    source.write("agent.last_belief", mapped_value);
+                }
             }
         },
         evaluator: function(memory) {
