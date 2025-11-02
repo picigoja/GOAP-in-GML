@@ -100,6 +100,15 @@ agent.bind_beliefs_to_memory();
 agent.tick(_dt); // handles perception, planning, execution
 ```
 
+## Development
+
+### Developer Chat Modes
+This repo includes two AI chat modes to streamline Animus development:
+- **Copilot GML Agent** — interactive GML reasoning/refactor assistance (see `.copilot/chatmodes/gml-agent.chatmode.md`).
+- **Animus Codex Mode** — autonomous task execution for GML edits, tests, and CI (see `.codex/modes/animus.codexmode.md`).
+
+Use these modes to keep code style consistent, enforce deterministic behaviors, and automate repetitive refactors/tests.
+
 ### Predicates & Effects
 `Animus_Predicate.normalize_list` accepts strings, arrays, or structs:
 - `"agent.hungry"` → `{ key:"agent.hungry", op:"eq", value:true }`
