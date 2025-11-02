@@ -1,0 +1,65 @@
+name: Post strategy suggestions (PR-target)
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      # Download artifact produced by the PR-run (workflow "animus-ci.yml")
+      # NOTE: We do NOT check out PR code here.
+      - name: Download strategy-suggestions artifact from PR run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: animus-ci.yml
+          pr: ${{ github.event.pull_request.number }}
+          name: strategy-suggestions
+          path: _artifact
+          if_no_artifact_found: warn
+
+      # Prefer the pre-built markdown comment if present
+      - name: Post comment from markdown preview
+        if: ${{ hashFiles('_artifact/.strategy_comment_preview.md') != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('_artifact/.strategy_comment_preview.md','utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body
+            });
+
+      # Fallback: build a simple comment from the JSON
+      - name: Fallback — build comment from JSON
+        if: ${{ hashFiles('_artifact/.strategy_comment_preview.md') == '' && hashFiles('_artifact/.strategy_suggestions.json') != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('_artifact/.strategy_suggestions.json','utf8'));
+            const files = Array.isArray(data.files) ? data.files : data;
+            function section(f) {
+              const code = (f.suggested_template_code ?? '').trim();
+              return `### ${f.file}\n**Template:** ${f.suggested_kind}\n\n<details><summary>Proposed code</summary>\n\n\`\`\`gml\n${code}\n\`\`\`\n\n</details>\n`;
+            }
+            const body = `## Strategy suggestions\n\n${files.map(section).join('\n')}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body
+            });
+
+      - name: Nothing to post (no artifact found)
+        if: ${{ hashFiles('_artifact/**') == '' }}
+        run: echo "No 'strategy-suggestions' artifact found for PR #${{ github.event.pull_request.number }} — skipping."

@@ -10,19 +10,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: ChatGPT code review
-        uses: adshao/openai-chatgpt-code-review@v0.2.5
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          system-prompt: |
-            You are the Animus GML reviewer. Enforce:
-            - planner.plan has 4 args (agent, goals_to_check, last_goal, memory)
-            - immediately assert plan shape with Animus_Core.assert_plan_shape(plan)
-            - no legacy GOAP_Node/ActionPlan
-            - strategies expose start/update/stop/invariant_check; prefer templates
-            - deterministic execution (no random()/choose(), no wall-clock)
-            - no globals; minimal diffs; cite file:line; show ```gml patches only.
-          review-comment-prefix: "GPT review:"
-          max-diff-length: 12000
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Generate strategy suggestions
+        run: python tools/strategy_template_enforcer.py --verbose || true
+      - name: Post suggestions as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const p = 'tools/.strategy_suggestions.json';
+            if (!fs.existsSync(p)) {
+              core.info('No suggestions file found.');
+              return;
+            }
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            if (!data.non_templated || data.non_templated.length === 0) {
+              core.info('No non-templated strategies.');
+              return;
+            }
+            let body = '### Animus Strategy Suggestions (automated)\n';
+            for (const item of data.non_templated) {
+              body += `\n**${item.file}** → \`${item.suggested_kind}\`\n`;
+              body += `<details><summary>Suggested template code</summary>\n\n`;
+              body += '```gml\n' + item.suggested_template_code + '\n```\n';
+              body += '</details>\n';
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });

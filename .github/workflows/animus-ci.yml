@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
 permissions:
   contents: read
+  issues: write
 jobs:
   sanity:
     runs-on: ubuntu-latest
@@ -16,6 +17,8 @@ jobs:
           python-version: '3.11'
       - name: Install deps
         run: pip install pyyaml
+      - name: Validate linter config
+        run: python tools/gml_linter.py --validate-only
       - name: Lint GML (Animus rules)
         run: |
           python tools/gml_linter.py
@@ -57,36 +60,18 @@ jobs:
       - run: pip install pyyaml
       - name: Generate strategy suggestions (report)
         run: python tools/strategy_template_enforcer.py --verbose || true
-      - name: Upload suggestions artifact
+      - name: Prepare artifact files
+        run: |
+          # Copy generated artifacts to repository root with stable filenames so the poster workflow can read them
+          if [ -f tools/.strategy_suggestions.json ]; then cp tools/.strategy_suggestions.json .strategy_suggestions.json; fi
+          if [ -f tools/.strategy_comment_preview.md ]; then cp tools/.strategy_comment_preview.md .strategy_comment_preview.md; fi
+
+      - name: Upload strategy suggestions
         uses: actions/upload-artifact@v4
         with:
           name: strategy-suggestions
-          path: tools/.strategy_suggestions.json
-      - name: Comment suggestions on PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const p = 'tools/.strategy_suggestions.json';
-            if (!fs.existsSync(p)) {
-              core.info('No suggestions file found.');
-              return;
-            }
-            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-            if (!data.non_templated || data.non_templated.length === 0) {
-              core.info('No non-templated strategies.');
-              return;
-            }
-            let body = '### Animus Strategy Suggestions\n';
-            for (const item of data.non_templated) {
-              body += `\n**${item.file}** → \`${item.suggested_kind}\`\n`;
-              body += `<details><summary>Suggested template code</summary>\n\n`;
-              body += '```gml\n' + item.suggested_template_code + '\n```\n';
-              body += '</details>\n';
-            }
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
+          path: |
+            .strategy_suggestions.json
+            .strategy_comment_preview.md
+          if-no-files-found: warn
+          retention-days: 7

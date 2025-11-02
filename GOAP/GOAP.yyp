@@ -1,46 +1,46 @@
 {
-  "$GMProject":"v1",
-  "%Name":"GOAP",
-  "AudioGroups":[
-    {"$GMAudioGroup":"","%Name":"audiogroup_default","name":"audiogroup_default","resourceType":"GMAudioGroup","resourceVersion":"2.0","targets":-1,},
+  "$GMProject": "v1",
+  "%Name": "GOAP",
+  "AudioGroups": [
+    {"$GMAudioGroup": "", "%Name": "audiogroup_default", "name": "audiogroup_default", "resourceType": "GMAudioGroup", "resourceVersion": "2.0", "targets": -1}
   ],
-  "configs":{
-    "children":[],
-    "name":"Default",
+  "configs": {
+    "children": [],
+    "name": "Default"
   },
-  "defaultScriptType":1,
-  "Folders":[],
-  "ForcedPrefabProjectReferences":[],
-  "IncludedFiles":[],
-  "isEcma":false,
-  "LibraryEmitters":[],
-  "MetaData":{
-    "IDEVersion":"2024.13.1.193",
+  "defaultScriptType": 1,
+  "Folders": [],
+  "ForcedPrefabProjectReferences": [],
+  "IncludedFiles": [],
+  "isEcma": false,
+  "LibraryEmitters": [],
+  "MetaData": {
+    "IDEVersion": "2024.13.1.193"
   },
-  "name":"GOAP",
-  "resources":[
-    {"id":{"name":"Animus_Action","path":"scripts/Animus_Action/Animus_Action.yy",},},
-    {"id":{"name":"GOAP_ActionPlan","path":"scripts/Animus_Plan/Animus_Plan.yy",},},
-    {"id":{"name":"GOAP_ActionStrategy","path":"scripts/Animus_ActionStrategy/Animus_ActionStrategy.yy",},},
-    {"id":{"name":"GOAP_Agent","path":"scripts/Animus_Agent/Animus_Agent.yy",},},
-    {"id":{"name":"GOAP_Belief","path":"scripts/Animus_Belief/Animus_Belief.yy",},},
-    {"id":{"name":"GOAP_Component","path":"scripts/_Animus_Component/_Animus_Component.yy",},},
-    {"id":{"name":"Animus_Core","path":"scripts/Animus_Core/Animus_Core.yy",},},
-    {"id":{"name":"Animus_Debug","path":"scripts/Animus_Debug/Animus_Debug.yy",},},
-    {"id":{"name":"GOAP_Executor","path":"scripts/Animus_Executor/Animus_Executor.yy",},},
-    {"id":{"name":"GOAP_Goal","path":"scripts/Animus_Goal/Animus_Goal.yy",},},
-    {"id":{"name":"GOAP_Memory","path":"scripts/Animus_Memory/Animus_Memory.yy",},},
-    {"id":{"name":"Animus_Predicate","path":"scripts/Animus_Predicate/Animus_Predicate.yy",},},
-    {"id":{"name":"Animus_RunState","path":"scripts/Animus_RunState/Animus_RunState.yy",},},
-    {"id":{"name":"GOAP_Planner","path":"scripts/Animus_Planner/Animus_Planner.yy",},},
-    {"id":{"name":"GOAP_Sensor","path":"scripts/Animus_Sensor/Animus_Sensor.yy",},},
-    {"id":{"name":"GOAP_SensorHub","path":"scripts/Animus_SensorHub/Animus_SensorHub.yy",},},
+  "name": "GOAP",
+  "resources": [
+    {"id": {"name": "Animus_Action", "path": "scripts/Animus_Action/Animus_Action.yy"}},
+  {"id": {"name": "Animus_Plan", "path": "scripts/Animus_Plan/Animus_Plan.yy"}},
+  {"id": {"name": "Animus_ActionStrategy", "path": "scripts/Animus_ActionStrategy/Animus_ActionStrategy.yy"}},
+  {"id": {"name": "Animus_Agent", "path": "scripts/Animus_Agent/Animus_Agent.yy"}},
+  {"id": {"name": "Animus_Belief", "path": "scripts/Animus_Belief/Animus_Belief.yy"}},
+  {"id": {"name": "_Animus_Component", "path": "scripts/_Animus_Component/_Animus_Component.yy"}},
+    {"id": {"name": "Animus_Core", "path": "scripts/Animus_Core/Animus_Core.yy"}},
+    {"id": {"name": "Animus_Debug", "path": "scripts/Animus_Debug/Animus_Debug.yy"}},
+  {"id": {"name": "Animus_Executor", "path": "scripts/Animus_Executor/Animus_Executor.yy"}},
+  {"id": {"name": "Animus_Goal", "path": "scripts/Animus_Goal/Animus_Goal.yy"}},
+  {"id": {"name": "Animus_Memory", "path": "scripts/Animus_Memory/Animus_Memory.yy"}},
+    {"id": {"name": "Animus_Predicate", "path": "scripts/Animus_Predicate/Animus_Predicate.yy"}},
+    {"id": {"name": "Animus_RunState", "path": "scripts/Animus_RunState/Animus_RunState.yy"}},
+  {"id": {"name": "Animus_Planner", "path": "scripts/Animus_Planner/Animus_Planner.yy"}},
+  {"id": {"name": "Animus_Sensor", "path": "scripts/Animus_Sensor/Animus_Sensor.yy"}},
+  {"id": {"name": "Animus_SensorHub", "path": "scripts/Animus_SensorHub/Animus_SensorHub.yy"}}
   ],
-  "resourceType":"GMProject",
-  "resourceVersion":"2.0",
-  "RoomOrderNodes":[],
-  "templateType":"game",
-  "TextureGroups":[
-    {"$GMTextureGroup":"","%Name":"Default","autocrop":true,"border":2,"compressFormat":"bz2","customOptions":"","directory":"","groupParent":null,"isScaled":true,"loadType":"default","mipsToGenerate":0,"name":"Default","resourceType":"GMTextureGroup","resourceVersion":"2.0","targets":-1,},
-  ],
+  "resourceType": "GMProject",
+  "resourceVersion": "2.0",
+  "RoomOrderNodes": [],
+  "templateType": "game",
+  "TextureGroups": [
+    {"$GMTextureGroup": "", "%Name": "Default", "autocrop": true, "border": 2, "compressFormat": "bz2", "customOptions": "", "directory": "", "groupParent": null, "isScaled": true, "loadType": "default", "mipsToGenerate": 0, "name": "Default", "resourceType": "GMTextureGroup", "resourceVersion": "2.0", "targets": -1}
+  ]
 }

@@ -4,6 +4,7 @@ import re
 import sys
 import pathlib
 import yaml
+import argparse
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 cfg_path = ROOT / "tools" / "animus_rules.yaml"
@@ -13,6 +14,65 @@ if not cfg_path.exists():
 
 CFG = yaml.safe_load(cfg_path.read_text())
 
+REGEX_ERRORS = []
+
+def compile_regex_or_report(key, pattern, flags=0):
+    """Safely compile a regex pattern from config.
+    On error, report to stderr and return None (caller must handle skipping).
+    """
+    if not pattern:
+        return None
+    try:
+        return re.compile(pattern, flags)
+    except re.error as e:
+        REGEX_ERRORS.append((key, pattern, str(e)))
+        sys.stderr.write(f"[gml_linter] Invalid regex in config key '{key}': {e}\n")
+        sys.stderr.write(f"[gml_linter] Pattern: {pattern!r}\n")
+        return None
+
+def validate_regex_keys(cfg: dict):
+    """Validate common regex keys in the config and return list of error messages."""
+    errors = []
+    # keys we expect to be regex-like
+    candidate_keys = [
+        'ban_tabs', 'ban_trailing_ws', 'ban_silent_return', 'ban_globals',
+        'planner_call_regex', 'planner_old_sig_regex'
+    ]
+    for k in candidate_keys:
+        # nested preference pattern
+        if k == 'prefer_snapshot_pattern':
+            v = cfg.get('prefer_snapshot_false', {}).get('pattern')
+        else:
+            v = cfg.get(k)
+        if isinstance(v, str) and v.strip():
+            try:
+                re.compile(v, re.MULTILINE)
+            except re.error as e:
+                errors.append(f"{k}: {e}  (pattern={v!r})")
+    return errors
+
+REGEX_VALIDATION_ERRORS = validate_regex_keys(CFG)
+if REGEX_VALIDATION_ERRORS:
+    for line in REGEX_VALIDATION_ERRORS:
+        sys.stderr.write(f"[gml_linter] {line}\n")
+
+# CLI
+ap = argparse.ArgumentParser()
+ap.add_argument('--validate-only', action='store_true', dest='validate_only', help='Validate regex config and exit.')
+args = ap.parse_args()
+
+# If requested, validate regex config and exit early (do not run scans)
+if args.validate_only:
+    if REGEX_VALIDATION_ERRORS or REGEX_ERRORS:
+        sys.stderr.write('[gml_linter] Configuration regex issues detected.\n')
+        for k, pat, err in REGEX_ERRORS:
+            sys.stderr.write(f"[gml_linter] key={k} pattern={pat!r} error={err}\n")
+        for line in REGEX_VALIDATION_ERRORS:
+            sys.stderr.write(f"[gml_linter] {line}\n")
+        sys.exit(2)
+    print('[gml_linter] regex config OK')
+    sys.exit(0)
+
 GML_FILES = [p for p in ROOT.rglob("**/*.gml") if ".git" not in str(p)]
 ISSUES = 0
 
@@ -21,25 +81,39 @@ def emit(path, line_no, kind, msg, hint=None):
     ISSUES += 1
     print(f"{path}:{line_no}: [{kind}] {msg}")
     if hint:
-        print(f"  ↳ {hint}")
+        # Use ASCII arrow to avoid console encoding issues on some terminals
+        print(f"  -> {hint}")
 
 def iter_lines(path):
     text = path.read_text(encoding="utf-8", errors="ignore")
     return text, text.splitlines()
 
 def rx(pattern, flags=0):
-    return re.compile(pattern, flags)
+    try:
+        return re.compile(pattern, flags)
+    except re.error:
+        return None
 
 # ---------- Generic scans ----------
-RX_TAB     = rx(CFG["ban_tabs"]) if CFG.get("ban_tabs") else None
-RX_TWS     = rx(CFG["ban_trailing_ws"]) if CFG.get("ban_trailing_ws") else None
-RX_SILENT  = rx(CFG["ban_silent_return"], re.M) if CFG.get("ban_silent_return") else None
-RX_GLOBAL  = rx(CFG["ban_globals"]) if CFG.get("ban_globals") else None
-RX_PLANNER = rx(CFG["planner_call_regex"]) if CFG.get("planner_call_regex") else None
+RX_TAB     = compile_regex_or_report('ban_tabs', CFG.get('ban_tabs'))
+RX_TWS     = compile_regex_or_report('ban_trailing_ws', CFG.get('ban_trailing_ws'))
+RX_SILENT  = compile_regex_or_report('ban_silent_return', CFG.get('ban_silent_return'), re.M)
+RX_GLOBAL  = compile_regex_or_report('ban_globals', CFG.get('ban_globals'))
+RX_PLANNER = compile_regex_or_report('planner_call_regex', CFG.get('planner_call_regex'), re.S)
 
-RX_BANS = [("legacy", rx("|".join(CFG.get("ban_legacy", []))))] if CFG.get("ban_legacy") else []
-RX_RANDOM = [("nondeterminism.random", rx("|".join(CFG.get("ban_random", []))))] if CFG.get("ban_random") else []
-RX_WALL   = [("nondeterminism.wallclock", rx("|".join(CFG.get("ban_wallclock", []))))] if CFG.get("ban_wallclock") else []
+# compile joined ban lists into a single alternation for scanning
+RX_BANS = []
+if CFG.get('ban_legacy'):
+    RX_BANS.append(('legacy', compile_regex_or_report('ban_legacy', '|'.join(CFG.get('ban_legacy', [])))))
+RX_RANDOM = []
+if CFG.get('ban_random'):
+    RX_RANDOM.append(('nondeterminism.random', compile_regex_or_report('ban_random', '|'.join(CFG.get('ban_random', [])))))
+RX_WALL = []
+if CFG.get('ban_wallclock'):
+    RX_WALL.append(('nondeterminism.wallclock', compile_regex_or_report('ban_wallclock', '|'.join(CFG.get('ban_wallclock', [])))))
+
+# optional old-signature detector
+RX_PLANNER_OLD = compile_regex_or_report('planner_old_sig_regex', CFG.get('planner_old_sig_regex'), re.S)
 
 STRAT_METHODS = CFG.get("strategy_required_methods", [])
 
@@ -83,34 +157,63 @@ def scan_planner_calls(path):
         return
     text, _ = iter_lines(path)
     for m in RX_PLANNER.finditer(text):
-        # naive capture of (...) region
-        start = m.end()
-        depth = 1
-        i = start
-        while i < len(text) and depth > 0:
-            if text[i] == "(":
-                depth += 1
-            elif text[i] == ")":
-                depth -= 1
-            i += 1
-        args = text[start:i-1]
+        # prefer explicit (?P<args>) capture if provided in regex
+        args = None
+        try:
+            if 'args' in m.re.groupindex:
+                args = m.group('args')
+        except Exception:
+            args = None
+
+        if args is None:
+            # fallback: naive capture of (...) region following the match
+            start = m.end()
+            depth = 1
+            i = start
+            while i < len(text) and depth > 0:
+                if text[i] == "(":
+                    depth += 1
+                elif text[i] == ")":
+                    depth -= 1
+                i += 1
+            args = text[start:i-1]
+            tail = text[i:i+200]
+        else:
+            # compute tail for plan_shape assertion from end of match
+            tail = text[m.end():m.end()+200]
+
         argc = count_args(args)
-        if argc != CFG.get("required_arg_count", 0):
+        req = CFG.get('required_arg_count', 0)
+        if req and argc != req:
             line_no = text.count('\n', 0, m.start()) + 1
-            emit(path, line_no, "contract.planner_args",
-                 f"`planner.plan(...)` expects {CFG['required_arg_count']} args, found {argc}",
-                 "Use: plan(agent, goals_to_check, last_goal, memory)")
+            emit(path, line_no, 'contract.planner_args',
+                 f"`planner.plan(...)` expects {req} args, found {argc}",
+                 'Use: plan(agent, goals_to_check, last_goal, memory)')
+
+        # additionally detect known old 3-arg signature if configured
+        if RX_PLANNER_OLD:
+            try:
+                # check old signature in the matched span
+                span = m.group(0)
+                if RX_PLANNER_OLD.search(span):
+                    line_no = text.count('\n', 0, m.start()) + 1
+                    emit(path, line_no, 'contract.planner_old_sig',
+                         'Found legacy planner.plan(...) signature with 3 args; consider adding memory argument',
+                         'Upgrade to planner.plan(agent, goals, last_goal, memory)')
+            except Exception:
+                pass
+
         # encourage plan shape assertion nearby
-        tail = text[i:i+200]
-        if "assert_plan_shape" not in tail:
+        if 'assert_plan_shape' not in tail:
             line_no = text.count('\n', 0, m.start()) + 1
-            emit(path, line_no, "contract.plan_shape.assertion",
-                 "Missing `Animus_Core.assert_plan_shape(plan)` after planner call")
+            emit(path, line_no, 'contract.plan_shape.assertion',
+                 'Missing `Animus_Core.assert_plan_shape(plan)` after planner call')
 
 def scan_strategy_structs(path):
     text, _ = iter_lines(path)
-    # Look for build_strategy returning a struct literal `{ ... }`
-    for m in re.finditer(r'\bbuild_strategy\b.*?{', text, re.S):
+    # Look for common strategy-factory fields assigned a struct literal, e.g. `build_strategy = { ... }`
+    # Use a stricter pattern to avoid matching occurrences inside lists or comments.
+    for m in re.finditer(r'\b(?:build_strategy|create_strategy|strategy_factory|make_strategy|strategy_builder)\b\s*=\s*{', text):
         struct_start = m.end()-1
         depth = 1
         i = struct_start
@@ -177,6 +280,16 @@ def main():
                     emit(f, line_no, "arch.agent_too_heavy",
                          "Agent.tick seems to contain heavy logic (heuristic)",
                          "Delegate logic to planner/executor; keep tick orchestration-only.")
+
+    # If there were regex validation errors, print a concise summary and fail
+    if REGEX_ERRORS or REGEX_VALIDATION_ERRORS:
+        sys.stderr.write("[gml_linter] Configuration regex issues detected.\n")
+        for k, pat, err in REGEX_ERRORS:
+            sys.stderr.write(f"[gml_linter] key={k} pattern={pat!r} error={err}\n")
+        for line in REGEX_VALIDATION_ERRORS:
+            sys.stderr.write(f"[gml_linter] {line}\n")
+        # Exit with distinct code so CI can detect config problems
+        sys.exit(2)
 
     if ISSUES:
         sys.exit(1)

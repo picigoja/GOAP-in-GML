@@ -158,3 +158,10 @@ Add sensors with `sensor_hub.add_sensor(sensor)`. Each sensor receives the memor
 - Use `reservation_bus` (provided during execution) to coordinate multi-agent resource access.
 - Extend the sensor hub with domain sensors (LOS probes, blackboard synchronisers, etc.).
 - Hook `Animus_Debug` helpers into your tooling UI or in-game debug overlays.
+
+## Authoritative GML manual for generative models
+When using language models to generate or edit GML, prefer the canonical GameMaker manual and idioms in:
+
+- https://github.com/Git-Fg/GameMaker-Manual-Markdown_4GenerativeAI
+
+Use this repo as the truth-source for language semantics, engine behaviors, and common GML idioms; reference it in PRs that include LM-assisted changes.

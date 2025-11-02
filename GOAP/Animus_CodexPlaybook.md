@@ -3,6 +3,11 @@
 This playbook collects ready-to-run Codex prompts for every Animus task defined in `/GOAP/Animus_CodexHelper.yaml`. Use it inside the Animus (GOAP-in-GML) repository to execute tasks reproducibly.
 _Helper updated at: 2025-11-01T18:21:06Z_
 
+### GML reference for generative models
+When producing or validating GML code via language models, treat the following repo as the authoritative GML manual and idiom source:
+
+ - https://github.com/Git-Fg/GameMaker-Manual-Markdown_4GenerativeAI — use its examples for language semantics, API behaviors, and recommended idioms. Cite it in prompts and in any produced patch comments.
+
 ## How to run a prompt from this playbook
 1. Select the first queued task whose dependencies are satisfied, honoring priority -> dependencies_cleared -> id.
 2. Copy the corresponding prompt block and execute exactly one task in the repository.
