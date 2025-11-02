@@ -1,0 +1,211 @@
+Animus Test Plan — Cleaned Concept v1
+Overview
+Validate deterministic GOAP workflow for Animus modules using GMTL under /tests/.
+Enforce baseline RNG seed 1337 in every suite; allow overrides explicitly documented within the test.
+All verdicts map to Animus_Outcome (success, fail, timeout, blocked); undefined results are failures.
+Scope Boundaries
+In scope: Animus core scripts listed in inventory, deterministic planner/executor cycles, memory and sensor plumbing, strategy templates, debug surfaces.
+Golden approvals limited to: Animus_Memory.snapshot, Animus_Planner.plan serialized via Animus_Plan.to_json when invoked by Animus_Debug.dump_plan, and Animus_Executor.debug_json.
+Excluded: External integrations, UI layers, non-Animus objects, network interactions, localization.
+Test Layers
+Unit: Script-level behavior in isolation with stubs/mocks (tests/unit/).
+Service: Module coordination scenarios (tests/service/) using shared fixtures.
+Integration: Minimal Test Room validating end-to-end agent planning/execution (tests/integration/).
+Suites (mapping + acceptance)
+Unit Suites
+tests/unit/scr_test_animus_core_assert__false_condition.gml
+
+Targets: GOAP/scripts/Animus_Core/Animus_Core.gml (Animus_Core.raise, Animus_Core.assert, Animus_Core.is_callable, Animus_Core.pretty).
+Fixtures: tests/_helpers/scr_test_fixture_assert_listener.gml.
+Acceptance: raises prefixed error on false condition, callable detection matches methods/functions, pretty printer outputs stable string given canonical struct; outcomes recorded as Animus_Outcome.success or Animus_Outcome.fail.
+tests/unit/scr_test__animus_component_identity__increments.gml
+
+Targets: GOAP/scripts/_Animus_Component/_Animus_Component.gml.
+Fixtures: tests/_helpers/scr_test_fixture_component_reset.gml.
+Acceptance: component_id strictly increments per instantiation, is_equal compares identity not structure; failure -> Animus_Outcome.fail.
+tests/unit/scr_test_animus_predicate_normalize__mixed_inputs.gml
+
+Targets: GOAP/scripts/Animus_Predicate/Animus_Predicate.gml.
+Fixtures: tests/_helpers/scr_test_fixture_predicate_samples.gml.
+Acceptance: normalization handles strings/struct arrays, evaluate passes eq/neq/unset cases, apply_effect removes keys, extract_keys_from_action dedupes; deterministic results under seed 1337.
+tests/unit/scr_test_animus_action_cost__normalizes_input.gml
+
+Targets: GOAP/scripts/Animus_Action/Animus_Action.gml.
+Fixtures: tests/_helpers/scr_test_fixture_action_context.gml.
+Acceptance: numeric/callable/fallback cost produce consistent real, describe contains name & nominal cost.
+tests/unit/scr_test_animus_goal_matches_state__exact_effects.gml
+
+Targets: GOAP/scripts/Animus_Goal/Animus_Goal.gml.
+Fixtures: tests/_helpers/scr_test_fixture_memory_stub.gml.
+Acceptance: desired effects normalized, priority callable executed, matches_state true/false per state.
+tests/unit/scr_test_animus_belief_debounce__respects_interval.gml
+
+Targets: GOAP/scripts/Animus_Belief/Animus_Belief.gml.
+Fixtures: tests/_helpers/scr_test_fixture_memory_factory.gml.
+Acceptance: debounce prevents premature evaluation, auto_clean triggers memory.clean, selector fallback uses cached value; result logs deterministic.
+tests/unit/scr_test_animus_plan_to_json__invalid_flag.gml
+
+Targets: GOAP/scripts/Animus_Plan/Animus_Plan.gml.
+Fixtures: tests/_helpers/scr_test_fixture_plan_structs.gml.
+Acceptance: invalid plan sets plan_valid:false, length correct, meta keys sorted; golden compare tests/gold/plan/invalid_plan.json.
+tests/unit/scr_test_animus_memory_set__marks_dirty.gml
+
+Targets: GOAP/scripts/Animus_Memory/Animus_Memory.gml.
+Fixtures: tests/_helpers/scr_test_fixture_memory_factory.gml.
+Acceptance: set marks dirty, clamps confidence [0,1], snapshot(true) deep clones arrays; golden compare tests/gold/memory/snapshot_full.json.
+tests/unit/scr_test_animus_actionstrategy_defaults__running.gml
+
+Targets: GOAP/scripts/Animus_ActionStrategy/Animus_ActionStrategy.gml.
+Fixtures: tests/_helpers/scr_test_fixture_strategy_context.gml.
+Acceptance: default update returns Animus_RunState.RUNNING, interrupt calls stop, alias accessors pass context.
+tests/unit/scr_test_animus_runstate_constants__lowercase.gml
+
+Targets: GOAP/scripts/Animus_RunState/Animus_RunState.gml.
+Fixtures: none.
+Acceptance: enum values exactly running,success,failed,interrupted,timeout; mismatch => Animus_Outcome.fail.
+tests/unit/scr_test_animus_strategytemplates_timed__soft_timeout.gml
+
+Targets: Animus_StrategyTemplates.gml.
+Fixtures: tests/_helpers/scr_test_fixture_strategy_timer.gml.
+Acceptance: Strategy_Timed hits soft timeout -> returns Animus_RunState.FAILED; Strategy_Instant completes after first update; Move caches last bad nav key.
+tests/unit/scr_test_animus_sensor_tick__interval_handling.gml
+
+Targets: GOAP/scripts/Animus_Sensor/Animus_Sensor.gml.
+Fixtures: tests/_helpers/scr_test_fixture_sensor_stub.gml.
+Acceptance: interval>0 accumulates, interval<=0 triggers every tick; memory writes deterministic.
+tests/unit/scr_test_animus_sensorhub_add_sensor__prevents_duplicates.gml
+
+Targets: GOAP/scripts/Animus_SensorHub/Animus_SensorHub.gml.
+Fixtures: tests/_helpers/scr_test_fixture_sensor_stub.gml.
+Acceptance: duplicate sensor rejected, tick handles stored/explicit memory.
+tests/unit/scr_test_animus_debug_profile_block__elapsed_nonnegative.gml
+
+Targets: GOAP/scripts/Animus_Debug/Animus_Debug.gml.
+Fixtures: tests/_helpers/scr_test_fixture_timer_stub.gml.
+Acceptance: profile_block returns ms>=0, missing trace snapshot yields <empty> string.
+Service Suites
+tests/service/scr_test_animus_planner_plan__reuse_policy.gml
+
+Targets: GOAP/scripts/Animus_Planner/Animus_Planner.gml, GOAP/scripts/Animus_Plan/Animus_Plan.gml.
+Fixtures: tests/_helpers/scr_test_fixture_agent_actions.gml, tests/_helpers/scr_test_fixture_memory_factory.gml.
+Acceptance: zero-step plan when goal satisfied, reuse blocked when meta.is_partial, dirty memory prevents reuse; compare Animus_Plan.to_json against tests/gold/plan/food_plan.json.
+tests/service/scr_test_animus_executor_lifecycle__status_transitions.gml
+
+Targets: GOAP/scripts/Animus_Executor/Animus_Executor.gml, Animus_StrategyTemplates.gml.
+Fixtures: tests/_helpers/scr_test_fixture_executor_context.gml, tests/_helpers/scr_test_fixture_reservation_bus.gml.
+Acceptance: start acquires reservations, status flow idle→starting→running→finished|failed|interrupted, invalid result coerced to failed, was_plan_invalidated toggles/clears; outputs Animus_Outcome.success or matching final state.
+tests/service/scr_test_animus_executor_rng__deterministic_sequence.gml
+
+Targets: GOAP/scripts/Animus_Executor/Animus_Executor.gml.
+Fixtures: tests/_helpers/scr_test_fixture_executor_context.gml.
+Acceptance: with seed 1337, rng_float01 and rng_int sequences reproducible; overrides logged when necessary.
+tests/service/scr_test_animus_beliefs_memory__auto_clean_flow.gml
+
+Targets: GOAP/scripts/Animus_Belief/Animus_Belief.gml, GOAP/scripts/Animus_Memory/Animus_Memory.gml.
+Fixtures: tests/_helpers/scr_test_fixture_memory_factory.gml, tests/_helpers/scr_test_fixture_belief_config.gml.
+Acceptance: belief bind/unbind manipulates memory, debounce respects tick counts, auto_clean clears dirty flag post-evaluation.
+tests/service/scr_test_animus_sensorhub_memory__dirty_propagation.gml
+
+Targets: GOAP/scripts/Animus_SensorHub/Animus_SensorHub.gml, GOAP/scripts/Animus_Sensor/Animus_Sensor.gml, GOAP/scripts/Animus_Memory/Animus_Memory.gml.
+Fixtures: tests/_helpers/scr_test_fixture_sensor_stub.gml, tests/_helpers/scr_test_fixture_memory_factory.gml.
+Acceptance: sensors write to memory, dirty flags propagate, beliefs observing same key receive updates.
+tests/service/scr_test_animus_agent_tick__handles_replan_triggers.gml
+
+Targets: GOAP/scripts/Animus_Agent/Animus_Agent.gml, GOAP/scripts/Animus_Planner/Animus_Planner.gml, GOAP/scripts/Animus_Executor/Animus_Executor.gml.
+Fixtures: tests/_helpers/scr_test_fixture_agent_bindings.gml, tests/_helpers/scr_test_fixture_executor_context.gml.
+Acceptance: agent binds planner/memory/executor, tick_planning produces plan, on_plan writes agent.plan.goal_name memory key, handles invalidation triggers (stale_memory, timeout).
+tests/service/scr_test_animus_executor_trace__golden_debug_json.gml
+
+Targets: GOAP/scripts/Animus_Executor/Animus_Executor.gml.
+Fixtures: tests/_helpers/scr_test_fixture_executor_context.gml.
+Acceptance: debug_json matches golden tests/gold/executor/trace_success.json for successful run; failure or drift => Animus_Outcome.fail.
+Integration Suite
+tests/integration/TestRoom_Animus/scr_test_animus_agent_e2e__food_cycle.gml
+
+Targets: composite modules (Animus_Agent, Animus_Planner, Animus_Action, Animus_Goal, Animus_Memory, Animus_Executor, Animus_StrategyTemplates, Animus_Debug).
+Fixtures: tests/integration/TestRoom_Animus/TestRoom_Animus.yy, tests/_helpers/scr_test_fixture_world_stub.gml, tests/_helpers/scr_test_fixture_executor_context.gml.
+Acceptance: deterministic tick sequence: agent hungry/no food → plan Get Food & Eat → executor completes strategies → memory agent.hungry false, agent.has_food resets, final outcome Animus_Outcome.success, trace JSON matches tests/gold/executor/trace_success.json.
+tests/integration/TestRoom_Animus/scr_test_animus_agent_e2e__invariant_fail_replan.gml
+
+Targets: same as above plus Move strategy path invariants.
+Fixtures: same plus tests/_helpers/scr_test_fixture_invalid_nav_path.gml.
+Acceptance: induced invariant failure triggers executor invalidation, agent requests new plan, final outcome Animus_Outcome.fail, plan invalidation reason invariant_fail, logs reproducible.
+tests/integration/TestRoom_Animus/scr_test_animus_agent_e2e__timed_timeout.gml
+
+Targets: Animus_StrategyTemplates timed flow, executor timeout handling.
+Fixtures: same plus tests/_helpers/scr_test_fixture_timed_strategy_params.gml.
+Acceptance: Strategy_Timed soft timeout < target causes executor final state timeout, agent records Animus_Outcome.timeout, memory agent.plan.goal_name cleared.
+Project Layout (final)
+tests/
+  _helpers/
+    scr_test_fixture_assert_listener.gml
+    scr_test_fixture_component_reset.gml
+    scr_test_fixture_predicate_samples.gml
+    scr_test_fixture_action_context.gml
+    scr_test_fixture_memory_factory.gml
+    scr_test_fixture_memory_stub.gml
+    scr_test_fixture_plan_structs.gml
+    scr_test_fixture_strategy_context.gml
+    scr_test_fixture_strategy_timer.gml
+    scr_test_fixture_sensor_stub.gml
+    scr_test_fixture_timer_stub.gml
+    scr_test_fixture_agent_actions.gml
+    scr_test_fixture_executor_context.gml
+    scr_test_fixture_reservation_bus.gml
+    scr_test_fixture_belief_config.gml
+    scr_test_fixture_agent_bindings.gml
+    scr_test_fixture_world_stub.gml
+    scr_test_fixture_invalid_nav_path.gml
+    scr_test_fixture_timed_strategy_params.gml
+  gold/
+    plan/
+      food_plan.json
+      invalid_plan.json
+    memory/
+      snapshot_full.json
+    executor/
+      trace_success.json
+  unit/
+    scr_test_animus_core_assert__false_condition.gml
+    scr_test__animus_component_identity__increments.gml
+    scr_test_animus_predicate_normalize__mixed_inputs.gml
+    scr_test_animus_action_cost__normalizes_input.gml
+    scr_test_animus_goal_matches_state__exact_effects.gml
+    scr_test_animus_belief_debounce__respects_interval.gml
+    scr_test_animus_plan_to_json__invalid_flag.gml
+    scr_test_animus_memory_set__marks_dirty.gml
+    scr_test_animus_actionstrategy_defaults__running.gml
+    scr_test_animus_runstate_constants__lowercase.gml
+    scr_test_animus_strategytemplates_timed__soft_timeout.gml
+    scr_test_animus_sensor_tick__interval_handling.gml
+    scr_test_animus_sensorhub_add_sensor__prevents_duplicates.gml
+    scr_test_animus_debug_profile_block__elapsed_nonnegative.gml
+  service/
+    scr_test_animus_planner_plan__reuse_policy.gml
+    scr_test_animus_executor_lifecycle__status_transitions.gml
+    scr_test_animus_executor_rng__deterministic_sequence.gml
+    scr_test_animus_beliefs_memory__auto_clean_flow.gml
+    scr_test_animus_sensorhub_memory__dirty_propagation.gml
+    scr_test_animus_agent_tick__handles_replan_triggers.gml
+    scr_test_animus_executor_trace__golden_debug_json.gml
+  integration/
+    TestRoom_Animus/
+      TestRoom_Animus.yy
+      scr_test_animus_agent_e2e__food_cycle.gml
+      scr_test_animus_agent_e2e__invariant_fail_replan.gml
+      scr_test_animus_agent_e2e__timed_timeout.gml
+docs/
+  tests/
+    Animus_Test_Plan_Cleaned_Concept_v1.md
+CI Outline (final)
+Extend tools/precommit-animus.sh to run gmtl test --suite=unit, gmtl test --suite=service, gmtl test --suite=integration sequentially; enforce seed 1337 via environment (ANIMUS_TEST_SEED=1337).
+Integrate golden comparison using tools/gml_sanity.py to verify JSON fixtures unchanged; require manual update flag for goldens.
+Lint new scripts with tools/gml_linter.py; structural integrity checked via tools/yy_integrity.py for Test Room assets.
+Tickets
+T1: Scaffold fixtures under tests/_helpers/ (memory, executor, sensor, planner helpers).
+T2: Implement unit suites per mapping, ensure seed setup helper invoked.
+T3: Implement service suites with shared fixtures, add golden JSON assets.
+T4: Build Test Room integration scripts and scenarios, confirm golden trace generation.
+T5: Update CI scripts to include new suites, environment seed, and golden verification.
+Out-of-Scope
+Non-Animus modules, multiplayer synchronization, runtime performance benchmarking, localization assets, non-deterministic sandbox tests.

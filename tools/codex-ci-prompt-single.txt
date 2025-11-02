@@ -1,0 +1,104 @@
+```
+PHASE: 3
+
+ROLE: You are an implementation agent with write access to a GameMaker Studio 2 repository.  
+You will translate a finalized “Cleaned Concept vX” document into a functional, deterministic test harness for the Animus framework.
+
+DOMAIN CONTEXT:  
+The project uses GML within GameMaker Studio 2.  
+Modules are prefixed “Animus_” or “GOAP_”.  
+Variables use snake_case; classes use PascalCase; objects prefixed obj_*; scripts prefixed scr_*.  
+Tests use the GMTL framework and reside under /tests/.  
+Naming convention: `test_<module>_<behavior>__<condition>`.  
+Deterministic RNG seed = 1337 baseline.  
+Outcome enum: `Animus_Outcome { success, fail, timeout, blocked }`.  
+All file paths are relative to repo root.
+
+TASK:  
+Implement the first working **test harness** described in “Cleaned Concept vX”.  
+This includes creating helper libraries, example tests, a minimal Test Runner, CI integration, and documentation.
+
+CONSTRAINTS:
+- Language: **GML (GameMaker)** only.  
+- Do **not** modify core runtime behavior; only add missing explicit outcomes if undefined is used.  
+- Determinism required: centralize seed via `DeterministicRNG.set_seed(seed)` for all tests.  
+- Tests must emit a machine-readable JSON report to `./tests/_out/report.json` containing suite → cases → pass/fail/duration.  
+- Preserve repository naming, style, and directory conventions exactly.  
+- Output a short Markdown changelog and a single-line “how to run locally” instruction after completion.
+
+FILE TREE (create if missing):
+```
+
+tests/
+unit/
+service/
+integration/
+fixtures/
+golden/
+helpers/
+.gamemaker/
+TestRunnerRoom.yy
+.github/workflows/
+ci.yml
+README_tests.md
+
+```
+
+IMPLEMENTATION TASKS:
+
+1. **Helpers**  
+   Create lightweight utilities under `/tests/helpers/`:  
+   - `assert.gml` – assert_true, assert_equal, assert_deep_equal (JSON stringify), assert_raises.  
+   - `stub_clock.gml` – now(), advance(ms), reset().  
+   - `deterministic_rng.gml` – set_seed(int), randf(), randi(min,max).  
+   - `fake_nav.gml` – reserve(node_id), release(node_id), is_valid(path).
+
+2. **Unit Tests (pick real symbols from Cleaned Concept)**  
+   - Belief/Predicate truth tables (3–5 cases).  
+   - Memory snapshot round-trip (golden JSON under /tests/golden/memory_vX.json).  
+   - Planner cost comparator on a tiny action set.
+
+3. **Service Tests**  
+   - Strategy template “instant” → completes on first tick; idempotent on extra tick.  
+   - Strategy “timed” → accumulates dt; respects shorter timeout.  
+   - Strategy “move” → uses FakeNav invariant; releases reservation on fail/timeout.
+
+4. **Integration Test**  
+   - Micro-world agent with 2–3 actions (move → gather → deposit).  
+     Load fixtures from `/tests/fixtures/*.json`, run N ticks, assert final state.
+
+5. **Runner**  
+   - Implement a minimal **TestRunner** object that discovers scripts named `test_*.gml`, executes them in a dedicated room, aggregates results, prints JSON summary via `show_debug_message`, and writes to `/tests/_out/report.json`.
+
+6. **CI Workflow** (`.github/workflows/ci.yml`)  
+   - Trigger: `push`, `pull_request`.  
+   - OS: `windows-latest` (for GameMaker CLI).  
+   - Steps: checkout → cache → build TestRunner target → run → collect `tests/_out/report.json` → upload artifact → fail if any non-pass.  
+   - Log stdout to `tests/_out/console.log`.
+
+7. **Documentation**  
+   - Create `README_tests.md` detailing: running locally, adding tests, seed rules, golden updates, troubleshooting.
+
+8. **Safety Net**  
+   - If undefined outcomes detected in Executor/Strategies, add enum `Animus_Outcome` and adapt tests to use explicit outcomes without altering logic.
+
+ACCEPTANCE CRITERIA:
+- `tests/_out/report.json` exists with ≥ 5 tests across unit/service/integration.  
+- One initial failing test can be fixed trivially to verify pipeline.  
+- Reruns with the same seed produce identical output (except duration).  
+- Golden snapshot diffing: intentional change to `Memory.snapshot` triggers clear failure.  
+
+OUTPUT:
+- Produce atomic commits in this order:  
+  1. Test harness + helpers  
+  2. Example tests  
+  3. Runner  
+  4. CI workflow  
+  5. Docs  
+- After completion, print:  
+  **1)** A Markdown-formatted changelog of files added/modified.  
+  **2)** A single line: “Run tests locally by executing the TestRunner build configuration inside GameMaker or via CLI export.”  
+
+OUTPUT REQUIREMENT:  
+Return only the Markdown changelog and final instruction line—no commentary, no extra prose.
+```
